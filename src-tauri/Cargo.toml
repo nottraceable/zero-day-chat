@@ -17,7 +17,8 @@ libp2p = { version = "0.53", features = ["full", "tokio", "dns", "tcp", "websock
 futures = "0.3"
 async-trait = "0.1"
 dirs = "5.0"
-hex = "0.4.3"
+hex = "0.4"
 
 [features]
-default = ["tauri/custom-protocol"]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
