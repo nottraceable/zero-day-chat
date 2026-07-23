@@ -5,8 +5,11 @@ description = "Decentralized P2P Secure Chat"
 authors = ["nottraceable"]
 edition = "2021"
 
+[build-dependencies]
+tauri-build = "1.5"
+
 [dependencies]
-tauri = { version = "1.5", features = ["window-all", "shell-open"] }
+tauri = { version = "1.5", features = ["shell-open"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1", features = ["full"] }

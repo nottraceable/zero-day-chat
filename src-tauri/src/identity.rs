@@ -1,4 +1,5 @@
 use bip39::{Mnemonic, Language};
+use rand::RngCore;
 use rand::rngs::OsRng;
 use serde::{Serialize, Deserialize};
 
@@ -10,12 +11,14 @@ pub struct IdentityInfo {
 }
 
 pub fn generate_identity(username: String) -> Result<IdentityInfo, String> {
-    let mut rng = OsRng;
-    let mnemonic = Mnemonic::generate_in_with(&mut rng, Language::English, 24)
-        .map_err(|e| e.to_string())?;
+    let mut entropy = [0u8; 32];
+    OsRng.fill_bytes(&mut entropy);
     
+    let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy)
+        .map_err(|e| e.to_string())?;
+
     let seed_phrase = mnemonic.to_string();
-    let pub_key_mock = format!("0x{}...", &hex::encode(&seed_phrase.as_bytes()[0..8]));
+    let pub_key_mock = format!("0x{}", hex::encode(&entropy[0..8]));
 
     Ok(IdentityInfo {
         username,
