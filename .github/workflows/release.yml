@@ -46,5 +46,5 @@ jobs:
           tagName: v__VERSION__
           releaseName: 'ZERO-DAY v__VERSION__'
           releaseBody: 'Download installers below for Windows, macOS, and Linux.'
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
