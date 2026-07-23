@@ -1,27 +1,23 @@
 [package]
-name = "zero_day_chat"
+name = "zero-day-chat"
 version = "1.0.0"
-description = "A decentralized, P2P communication client"
-authors = ["you"]
+description = "Decentralized P2P Secure Chat"
+authors = ["nottraceable"]
 edition = "2021"
-rust-version = "1.77"
-
-[lib]
-name = "zero_day_chat_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
-
-[build-dependencies]
-tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
-tauri = { version = "2.0", features = [] }
-tauri-plugin-shell = "2.0"
+tauri = { version = "1.5", features = ["window-all", "shell-open"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-bip39 = "=1.0.1"
-hex = "0.4"
-getrandom = "0.3.4"
+tokio = { version = "1", features = ["full"] }
+bip39 = "2.0"
+rand = "0.8"
+ed25519-dalek = "2.1"
+libp2p = { version = "0.53", features = ["full", "tokio", "dns", "tcp", "websocket", "noise", "yamux", "gossipsub", "kad", "identify"] }
+futures = "0.3"
+async-trait = "0.1"
+dirs = "5.0"
+hex = "0.4.3"
 
 [features]
-default = ["custom-protocol"]
-custom-protocol = ["tauri/custom-protocol"]
+default = ["tauri/custom-protocol"]

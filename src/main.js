@@ -1,179 +1,233 @@
-// Application State
-const state = {
-  username: "",
-  peerId: "",
-  publicKey: "",
-  seedPhrase: [],
-  currentChannel: "general"
-};
+const { invoke } = window.__TAURI__.tauri;
 
-// Tauri IPC Invoker Helper
-async function invokeTauri(command, args = {}) {
-  if (window.__TAURI__ && window.__TAURI__.core) {
-    return await window.__TAURI__.core.invoke(command, args);
-  } else {
-    console.warn(`[Browser Fallback] Invoking '${command}'`, args);
-    return mockTauriCalls(command, args);
-  }
-}
+document.addEventListener("DOMContentLoaded", async () => {
+  const usernameInput = document.getElementById("username-input");
+  const btnNextSeed = document.getElementById("btn-next-seed");
+  const btnFinish = document.getElementById("btn-finish-onboarding");
+  const seedDisplay = document.getElementById("seed-display");
+  
+  let currentUsername = "";
+  let servers = [];
+  let friends = [];
+  let activeView = { type: "dm", id: null };
+  let messagesStore = {};
 
-// Fallback logic for browser testing prior to Tauri compilation
-function mockTauriCalls(command, args) {
-  if (command === "generate_identity") {
-    const mockWords = ["alpha", "bravo", "cipher", "delta", "echo", "foxtrot", "matrix", "node", "quantum", "shadow", "signal", "tunnel"];
-    return Promise.resolve({
-      peer_id: "peer_" + Math.random().toString(16).substring(2, 10),
-      public_key: "pk_" + Math.random().toString(16).substring(2, 10),
-      mnemonic: mockWords.join(" ")
-    });
-  }
-  if (command === "send_peer_message") {
-    return Promise.resolve({
-      id: "msg_" + Date.now(),
-      channel_id: args.channelId,
-      sender_id: args.senderId,
-      payload: args.content,
-      timestamp: Math.floor(Date.now() / 1000)
-    });
-  }
-  return Promise.resolve(null);
-}
-
-// DOM UI Switcher
-function switchScreen(screenId) {
-  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-  document.getElementById(screenId).classList.add("active");
-}
-
-function switchPanel(panelId) {
-  document.querySelectorAll(".content-panel").forEach(p => p.classList.remove("active"));
-  document.getElementById(panelId).classList.add("active");
-}
-
-// Initialize Application Events
-document.addEventListener("DOMContentLoaded", () => {
-
-  // 1. Splash Screen Transition
-  document.getElementById("btn-start").addEventListener("click", () => {
-    switchScreen("auth-screen");
-  });
-
-  // 2. Account Generation (Calling Rust identity module)
-  document.getElementById("btn-generate-seed").addEventListener("click", async () => {
-    const usernameInput = document.getElementById("username").value.trim();
-    if (!usernameInput) {
+  btnNextSeed.addEventListener("click", async () => {
+    currentUsername = usernameInput.value.trim();
+    if (!currentUsername) {
       alert("Please enter a valid handle.");
       return;
     }
 
     try {
-      const identity = await invokeTauri("generate_identity");
-      
-      state.username = usernameInput;
-      state.peerId = identity.peer_id;
-      state.publicKey = identity.public_key;
-      state.seedPhrase = identity.mnemonic.split(" ");
+      const identity = await invoke("create_identity", { username: currentUsername });
+      seedDisplay.innerHTML = "";
+      identity.seed_phrase.split(" ").forEach(word => {
+        const span = document.createElement("div");
+        span.className = "seed-word";
+        span.textContent = word;
+        seedDisplay.appendChild(span);
+      });
 
-      renderSeedPhrase(state.seedPhrase);
-
-      document.getElementById("auth-step-1").classList.remove("active");
-      document.getElementById("auth-step-2").classList.add("active");
+      document.getElementById("step-username").classList.remove("active");
+      document.getElementById("step-seed").classList.add("active");
     } catch (err) {
-      console.error("Identity generation error:", err);
-      alert("Failed to generate identity.");
+      alert("Error generating identity: " + err);
     }
   });
 
-  // 3. Enter Main Workspace
-  document.getElementById("btn-enter-app").addEventListener("click", () => {
-    document.getElementById("display-username").textContent = `@${state.username}`;
-    document.getElementById("display-peer-id").textContent = state.peerId;
-    switchScreen("app-screen");
+  btnFinish.addEventListener("click", () => {
+    document.getElementById("onboarding-container").classList.remove("active");
+    document.getElementById("app-container").classList.add("active");
+    
+    document.getElementById("display-username").textContent = currentUsername;
+    document.getElementById("user-initial").textContent = currentUsername.charAt(0).toUpperCase();
+    
+    renderSidebar();
   });
 
-  // Navigation Panel Switching
-  document.getElementById("tab-friends").addEventListener("click", (e) => {
-    setActiveNav(e.target);
-    switchPanel("panel-friends");
+  // Navigation & Sidebar Logic
+  document.getElementById("nav-dms").addEventListener("click", () => {
+    activeView = { type: "dm", id: null };
+    document.getElementById("current-context-title").textContent = "Direct Messages";
+    renderSidebar();
+    clearChatArea();
   });
 
-  document.getElementById("tab-dms").addEventListener("click", (e) => {
-    setActiveNav(e.target);
-    switchPanel("panel-chat");
-  });
-
-  document.querySelectorAll(".channel-item").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      document.querySelectorAll(".channel-item").forEach(c => c.classList.remove("active"));
-      e.target.classList.add("active");
-      
-      state.currentChannel = e.target.dataset.channel;
-      document.getElementById("current-channel-title").textContent = `# ${state.currentChannel}`;
-      switchPanel("panel-chat");
+  document.getElementById("btn-add-friend").addEventListener("click", () => {
+    openModal("Add Friend by Peer ID", "Peer ID or PublicKey...", (val) => {
+      if (val) {
+        friends.push({ id: val, name: val.substring(0, 8) + "..." });
+        renderSidebar();
+      }
     });
   });
 
-  // Chat Actions
-  document.getElementById("btn-send-msg").addEventListener("click", sendMessage);
-  document.getElementById("chat-input").addEventListener("keypress", (e) => {
+  document.getElementById("btn-create-server").addEventListener("click", () => {
+    openModal("Create Server", "Server Name...", (serverName) => {
+      if (serverName) {
+        const newServer = {
+          id: Date.now().toString(),
+          name: serverName,
+          initial: serverName.charAt(0).toUpperCase(),
+          channels: [
+            { id: "general", name: "general", category: "Text Channels" }
+          ]
+        };
+        servers.push(newServer);
+        renderServerIcons();
+      }
+    });
+  });
+
+  function renderServerIcons() {
+    const list = document.getElementById("server-list");
+    list.innerHTML = "";
+    servers.forEach(srv => {
+      const div = document.createElement("div");
+      div.className = "server-icon";
+      div.textContent = srv.initial;
+      div.title = srv.name;
+      div.addEventListener("click", () => {
+        activeView = { type: "server", id: srv.id, channelId: srv.channels[0].id };
+        document.getElementById("current-context-title").textContent = srv.name;
+        renderSidebar();
+        renderChatMessages();
+      });
+      list.appendChild(div);
+    });
+  }
+
+  function renderSidebar() {
+    const channelsList = document.getElementById("channels-list");
+    channelsList.innerHTML = "";
+
+    if (activeView.type === "dm") {
+      const header = document.createElement("div");
+      header.className = "category-header";
+      header.textContent = "Direct Messages";
+      channelsList.appendChild(header);
+
+      if (friends.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "channel-item";
+        empty.style.color = "var(--text-muted)";
+        empty.textContent = "No peers added yet.";
+        channelsList.appendChild(empty);
+      } else {
+        friends.forEach(f => {
+          const item = document.createElement("div");
+          item.className = "friend-item";
+          if (activeView.id === f.id) item.style.background = "rgba(255,255,255,0.05)";
+          item.textContent = f.name;
+          item.addEventListener("click", () => {
+            activeView = { type: "dm", id: f.id };
+            document.getElementById("active-chat-title").textContent = f.name;
+            renderChatMessages();
+          });
+          channelsList.appendChild(item);
+        });
+      }
+    } else if (activeView.type === "server") {
+      const srv = servers.find(s => s.id === activeView.id);
+      if (srv) {
+        const header = document.createElement("div");
+        header.className = "category-header";
+        header.textContent = "Text Channels";
+        channelsList.appendChild(header);
+
+        srv.channels.forEach(ch => {
+          const item = document.createElement("div");
+          item.className = "channel-item";
+          if (activeView.channelId === ch.id) item.style.background = "rgba(255,255,255,0.05)";
+          item.textContent = "# " + ch.name;
+          item.addEventListener("click", () => {
+            activeView.channelId = ch.id;
+            document.getElementById("active-chat-title").textContent = "# " + ch.name;
+            renderSidebar();
+            renderChatMessages();
+          });
+          channelsList.appendChild(item);
+        });
+      }
+    }
+  }
+
+  function clearChatArea() {
+    document.getElementById("active-chat-title").textContent = "Select a conversation or server channel";
+    document.getElementById("messages-container").innerHTML = `
+      <div class="welcome-message">
+        <h3>Secure Channel Ready</h3>
+        <p>End-to-end encrypted connection established across local nodes.</p>
+      </div>
+    `;
+  }
+
+  function renderChatMessages() {
+    const container = document.getElementById("messages-container");
+    container.innerHTML = "";
+    const key = activeView.type === "dm" ? `dm_${activeView.id}` : `srv_${activeView.id}_${activeView.channelId}`;
+    const msgs = messagesStore[key] || [];
+
+    if (msgs.length === 0) {
+      container.innerHTML = `<div class="welcome-message"><p>Beginning of encrypted transcript.</p></div>`;
+      return;
+    }
+
+    msgs.forEach(m => {
+      const bubble = document.createElement("div");
+      bubble.className = "message-bubble";
+      bubble.innerHTML = `<div class="message-author">${m.author}</div><div class="message-text">${m.text}</div>`;
+      container.appendChild(bubble);
+    });
+    container.scrollTop = container.scrollHeight;
+  }
+
+  // Sending Messages
+  document.getElementById("btn-send-message").addEventListener("click", sendMessage);
+  document.getElementById("message-input").addEventListener("keypress", (e) => {
     if (e.key === "Enter") sendMessage();
   });
-});
 
-function setActiveNav(element) {
-  document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
-  element.classList.add("active");
-}
+  function sendMessage() {
+    const input = document.getElementById("message-input");
+    const text = input.value.trim();
+    if (!text) return;
 
-function renderSeedPhrase(words) {
-  const container = document.getElementById("seed-display");
-  container.innerHTML = "";
-  words.forEach((word, idx) => {
-    const div = document.createElement("div");
-    div.className = "seed-word";
-    div.textContent = `${idx + 1}. ${word}`;
-    container.appendChild(div);
-  });
-}
+    const key = activeView.type === "dm" ? `dm_${activeView.id}` : `srv_${activeView.id}_${activeView.channelId}`;
+    if (!messagesStore[key]) messagesStore[key] = [];
 
-async function sendMessage() {
-  const input = document.getElementById("chat-input");
-  const text = input.value.trim();
-  if (!text) return;
-
-  try {
-    const msg = await invokeTauri("send_peer_message", {
-      channelId: state.currentChannel,
-      content: text,
-      senderId: state.username
-    });
-
-    appendMessageToUI(msg.sender_id, msg.payload, new Date(msg.timestamp * 1000));
+    messagesStore[key].push({ author: currentUsername, text });
     input.value = "";
-  } catch (err) {
-    console.error("Message error:", err);
+    renderChatMessages();
   }
-}
 
-function appendMessageToUI(author, text, date) {
-  const container = document.getElementById("chat-messages");
-  const msgEl = document.createElement("div");
-  msgEl.className = "message";
+  // Modal Utility
+  function openModal(title, placeholder, callback) {
+    document.getElementById("modal-title").textContent = title;
+    const input = document.getElementById("modal-input");
+    input.value = "";
+    input.placeholder = placeholder;
+    const overlay = document.getElementById("modal-overlay");
+    overlay.classList.remove("hidden");
 
-  const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const submitBtn = document.getElementById("modal-submit");
+    const cancelBtn = document.getElementById("modal-cancel");
 
-  msgEl.innerHTML = `
-    <span class="msg-author">${escapeHTML(author)}</span>
-    <span class="msg-time">${timeStr}</span>
-    <p class="msg-body">${escapeHTML(text)}</p>
-  `;
+    const cleanup = () => {
+      overlay.classList.add("hidden");
+      submitBtn.replaceWith(submitBtn.cloneNode(true));
+      cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+    };
 
-  container.appendChild(msgEl);
-  container.scrollTop = container.scrollHeight;
-}
+    document.getElementById("modal-submit").addEventListener("click", () => {
+      const val = input.value.trim();
+      callback(val);
+      cleanup();
+    }, { once: true });
 
-function escapeHTML(str) {
-  return str.replace(/[&<>'"]/g, 
-    tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
-  );
-}
+    document.getElementById("modal-cancel").addEventListener("click", () => {
+      cleanup();
+    }, { once: true });
+  }
+});

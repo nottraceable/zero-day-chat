@@ -1,138 +1,91 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ZERO-DAY</title>
-  <link rel="stylesheet" href="/src/styles.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zero-Day Chat</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-
-  <!-- 1. SPLASH SCREEN -->
-  <div id="splash-screen" class="screen active">
-    <div class="splash-content">
-      <div class="logo-wrapper">
-        <svg class="spinning-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="50" cy="50" r="42" stroke="#5865F2" stroke-width="4" stroke-dasharray="180 60" />
-          <polygon points="50,20 80,75 20,75" fill="#5865F2" opacity="0.8" />
-          <circle cx="50" cy="50" r="10" fill="#23A55A" />
-        </svg>
-      </div>
-      <h1>ZERO-DAY</h1>
-      <p class="subtitle">Decentralized. Untraceable. Sovereign.</p>
-      <button id="btn-start" class="btn-primary">Initialize Client</button>
-    </div>
-  </div>
-
-  <!-- 2. ACCOUNT CREATION FLOW -->
-  <div id="auth-screen" class="screen">
+  <!-- Onboarding View -->
+  <div id="onboarding-container" class="view-container active">
     <div class="auth-card">
+      <h1>ZERO-DAY</h1>
+      <p class="subtitle">Decentralized Encrypted P2P Communication</p>
       
-      <!-- Step 1: Choose Username -->
-      <div id="auth-step-1" class="auth-step active">
-        <h2>Create Identity</h2>
-        <p class="step-desc">Choose a public handle for the peer-to-peer network.</p>
-        <div class="input-group">
-          <label for="username">USERNAME</label>
-          <input type="text" id="username" placeholder="e.g. shadow_runner" autocomplete="off" />
-        </div>
-        <button id="btn-generate-seed" class="btn-primary">Generate Master Keys</button>
+      <div id="step-username" class="auth-step active">
+        <label for="username-input">Choose Your Handle</label>
+        <input type="text" id="username-input" placeholder="e.g. cipher_punk" autocomplete="off" />
+        <button id="btn-next-seed" class="btn primary">Generate Secure Identity</button>
       </div>
 
-      <!-- Step 2: Display Seed Phrase -->
-      <div id="auth-step-2" class="auth-step">
-        <h2>Your Recovery Seed</h2>
-        <p class="warning-text">⚠️ Write these 12 words down offline. If lost, your identity and messages cannot be recovered.</p>
+      <div id="step-seed" class="auth-step">
+        <label>Your BIP-39 Recovery Seed Phrase</label>
+        <p class="warning-text">Save these 24 words securely. Without them, account recovery is mathematically impossible.</p>
         <div id="seed-display" class="seed-grid"></div>
-        <button id="btn-enter-app" class="btn-primary">I Have Saved My Seed</button>
+        <button id="btn-finish-onboarding" class="btn primary">I Have Saved My Seed Phrase</button>
       </div>
-
     </div>
   </div>
 
-  <!-- 3. MAIN WORKSPACE -->
-  <div id="app-screen" class="screen">
-    
-    <!-- SERVER SIDEBAR -->
-    <nav class="server-sidebar">
-      <div class="server-icon active" id="btn-server-dm" title="Direct Messages">⚡</div>
-      <div class="divider"></div>
-      <div class="server-icon" id="btn-server-main" title="Community Hub">A</div>
-      <div class="server-icon add-server" id="btn-add-server" title="Create or Join Server">+</div>
+  <!-- Main App View -->
+  <div id="app-container" class="view-container">
+    <!-- Servers Sidebar -->
+    <nav class="servers-sidebar">
+      <div class="server-icon active" id="nav-dms" title="Direct Messages">DMs</div>
+      <div class="server-divider"></div>
+      <div id="server-list" class="server-list-container"></div>
+      <button id="btn-create-server" class="server-icon add-btn" title="Create Server">+</button>
     </nav>
 
-    <!-- CHANNEL / FRIENDS SIDEBAR -->
-    <aside class="sub-sidebar">
-      <header class="workspace-header">
-        <div class="user-profile-summary">
-          <span id="display-username">@user</span>
-          <span class="status-indicator online"></span>
-        </div>
-        <div class="peer-id-badge" id="display-peer-id">peer_0000</div>
-      </header>
-
-      <div class="sidebar-section">
-        <div class="section-title">NAVIGATION</div>
-        <button class="nav-item active" id="tab-friends">👥 Friends</button>
-        <button class="nav-item" id="tab-dms">💬 Direct Messages</button>
+    <!-- Channels / DMs Sidebar -->
+    <aside class="channels-sidebar">
+      <div class="sidebar-header">
+        <h2 id="current-context-title">Direct Messages</h2>
+        <button id="btn-add-friend" class="icon-btn" title="Add Peer">+</button>
       </div>
-
-      <div class="sidebar-section">
-        <div class="section-title">CHANNELS</div>
-        <button class="channel-item active" data-channel="general"># general</button>
-        <button class="channel-item" data-channel="vault"># encrypted-vault</button>
+      <div id="channels-list" class="channels-list">
+        <!-- Dynamic Channels / Direct Messages -->
+      </div>
+      <div class="user-profile-bar">
+        <div class="user-avatar" id="user-initial">U</div>
+        <div class="user-info">
+          <span id="display-username">Anonymous</span>
+          <span class="user-status">P2P Node Active</span>
+        </div>
       </div>
     </aside>
 
-    <!-- MAIN CONTENT AREA -->
-    <main class="main-content">
-      
-      <!-- FRIENDS PANEL -->
-      <section id="panel-friends" class="content-panel active">
-        <header class="panel-header">
-          <h2>Friends</h2>
-          <div class="header-actions">
-            <button class="btn-secondary" id="btn-add-friend-modal">+ Add Friend</button>
-          </div>
-        </header>
-
-        <div class="friends-list" id="friends-list">
-          <div class="friend-card">
-            <div class="friend-info">
-              <span class="status-dot online"></span>
-              <strong>cipher_guy</strong>
-              <span class="user-id">#peer_8a7f9c21</span>
-            </div>
-            <button class="btn-small">Message</button>
-          </div>
+    <!-- Chat Main Area -->
+    <main class="chat-main">
+      <header class="chat-header">
+        <span id="active-chat-title">Select a conversation or server channel</span>
+      </header>
+      <div id="messages-container" class="messages-container">
+        <div class="welcome-message">
+          <h3>Secure Channel Ready</h3>
+          <p>End-to-end encrypted connection established across local nodes.</p>
         </div>
-      </section>
-
-      <!-- CHAT PANEL -->
-      <section id="panel-chat" class="content-panel">
-        <header class="panel-header">
-          <h2 id="current-channel-title"># general</h2>
-          <span class="encryption-badge">🔒 End-to-End Encrypted</span>
-        </header>
-
-        <div class="chat-messages" id="chat-messages">
-          <div class="message system-msg">
-            <span class="msg-author">System</span>
-            <span class="msg-time">12:00 PM</span>
-            <p class="msg-body">P2P Mesh Network established. Messages are routed locally using memory-safe encryption.</p>
-          </div>
-        </div>
-
-        <div class="chat-input-container">
-          <input type="text" id="chat-input" placeholder="Message #general..." />
-          <button id="btn-send-msg" class="btn-primary">Send</button>
-        </div>
-      </section>
-
+      </div>
+      <div class="chat-input-wrapper">
+        <input type="text" id="message-input" placeholder="Message securely..." autocomplete="off" />
+        <button id="btn-send-message" class="btn send-btn">Send</button>
+      </div>
     </main>
-
   </div>
 
-  <script type="module" src="/src/main.js"></script>
+  <!-- Dynamic Modal Overlay -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3 id="modal-title">Action</h3>
+      <input type="text" id="modal-input" placeholder="Enter value..." autocomplete="off" />
+      <div class="modal-actions">
+        <button id="modal-cancel" class="btn secondary">Cancel</button>
+        <button id="modal-submit" class="btn primary">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="main.js" type="module"></script>
 </body>
 </html>
