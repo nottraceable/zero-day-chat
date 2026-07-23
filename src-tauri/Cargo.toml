@@ -1,6 +1,6 @@
 [package]
 name = "zero_day_chat"
-version = "0.1.0"
+version = "1.0.0"
 description = "A decentralized, P2P communication client"
 authors = ["you"]
 edition = "2021"
@@ -11,11 +11,11 @@ name = "zero_day_chat_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.0.0", features = [] }
+tauri-build = { version = "2.11", features = [] }
 
 [dependencies]
-tauri = { version = "2.0.0", features = [] }
-tauri-plugin-shell = "2.0.0"
+tauri = { version = "2.11", features = [] }
+tauri-plugin-shell = "2.11"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 bip39 = "2.0"
