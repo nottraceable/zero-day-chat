@@ -1,4 +1,4 @@
-use bip39::{Mnemonic, MnemonicType, Language};
+use bip39::{Mnemonic, Language};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::State;
@@ -14,12 +14,17 @@ pub struct IdentityState(pub Mutex<Option<Identity>>);
 
 #[tauri::command]
 pub fn generate_identity(state: State<'_, IdentityState>) -> Result<Identity, String> {
-    let mnemonic = Mnemonic::new(MnemonicType::Words12, Language::English);
-    let phrase = mnemonic.phrase().to_string();
+    let mut entropy = [0u8; 16];
+    getrandom::fill(&mut entropy).map_err(|e| e.to_string())?;
 
-    let entropy = mnemonic.entropy();
-    let peer_id = format!("peer_{}", hex::encode(&entropy[..4]));
-    let public_key = format!("pk_{}", hex::encode(&entropy[4..12]));
+    let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy)
+        .map_err(|e| e.to_string())?;
+    
+    let phrase = mnemonic.to_string();
+    let ent_bytes = mnemonic.to_entropy();
+    
+    let peer_id = format!("peer_{}", hex::encode(&ent_bytes[..4]));
+    let public_key = format!("pk_{}", hex::encode(&ent_bytes[4..12]));
 
     let identity = Identity {
         peer_id,
@@ -35,12 +40,12 @@ pub fn generate_identity(state: State<'_, IdentityState>) -> Result<Identity, St
 
 #[tauri::command]
 pub fn import_identity(phrase: String, state: State<'_, IdentityState>) -> Result<Identity, String> {
-    let mnemonic = Mnemonic::from_phrase(&phrase, Language::English)
+    let mnemonic = Mnemonic::parse_in_normalized(Language::English, &phrase)
         .map_err(|_| "Invalid seed phrase format".to_string())?;
 
-    let entropy = mnemonic.entropy();
-    let peer_id = format!("peer_{}", hex::encode(&entropy[..4]));
-    let public_key = format!("pk_{}", hex::encode(&entropy[4..12]));
+    let ent_bytes = mnemonic.to_entropy();
+    let peer_id = format!("peer_{}", hex::encode(&ent_bytes[..4]));
+    let public_key = format!("pk_{}", hex::encode(&ent_bytes[4..12]));
 
     let identity = Identity {
         peer_id,

@@ -1,0 +1,10 @@
+/home/mikraza/zero-day-chat/target/debug/deps/toml_writer-d0dd765359bda5c4.d: /home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/lib.rs /home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/integer.rs /home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/key.rs /home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/string.rs /home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/value.rs /home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/write.rs
+
+/home/mikraza/zero-day-chat/target/debug/deps/libtoml_writer-d0dd765359bda5c4.rmeta: /home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/lib.rs /home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/integer.rs /home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/key.rs /home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/string.rs /home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/value.rs /home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/write.rs
+
+/home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/lib.rs:
+/home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/integer.rs:
+/home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/key.rs:
+/home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/string.rs:
+/home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/value.rs:
+/home/mikraza/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml_writer-1.1.2+spec-1.1.0/src/write.rs:
