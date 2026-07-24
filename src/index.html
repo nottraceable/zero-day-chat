@@ -1,91 +1,186 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Zero-Day Chat</title>
-  <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZERO-DAY Chat</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script defer src="main.js"></script>
 </head>
 <body>
-  <!-- Onboarding View -->
-  <div id="onboarding-container" class="view-container active">
+  <!-- AUTH / ONBOARDING OVERLAY -->
+  <div id="auth-modal" class="modal-overlay">
     <div class="auth-card">
-      <h1>ZERO-DAY</h1>
-      <p class="subtitle">Decentralized Encrypted P2P Communication</p>
-      
-      <div id="step-username" class="auth-step active">
-        <label for="username-input">Choose Your Handle</label>
-        <input type="text" id="username-input" placeholder="e.g. cipher_punk" autocomplete="off" />
-        <button id="btn-next-seed" class="btn primary">Generate Secure Identity</button>
+      <div class="logo-header">
+        <span class="logo-icon">⚡</span>
+        <h2>ZERO-DAY</h2>
+      </div>
+      <p class="subtitle">Decentralized P2P Secure Messenger</p>
+
+      <div class="tab-buttons">
+        <button id="tab-create-btn" class="tab-btn active">Create Account</button>
+        <button id="tab-recover-btn" class="tab-btn">Recover Account</button>
       </div>
 
-      <div id="step-seed" class="auth-step">
-        <label>Your BIP-39 Recovery Seed Phrase</label>
-        <p class="warning-text">Save these 24 words securely. Without them, account recovery is mathematically impossible.</p>
-        <div id="seed-display" class="seed-grid"></div>
-        <button id="btn-finish-onboarding" class="btn primary">I Have Saved My Seed Phrase</button>
+      <!-- CREATE ACCOUNT FORM -->
+      <div id="create-account-form" class="auth-form">
+        <label for="create-display-name">Choose Display Name</label>
+        <input type="text" id="create-display-name" placeholder="e.g. Satoshi" autocomplete="off" />
+        <button id="gen-seed-btn" class="primary-btn block-btn">Generate Keypair & Seed</button>
+
+        <div id="seed-display-area" class="seed-box hidden">
+          <label for="generated-user-id">Your User ID (Public Key)</label>
+          <div class="input-copy-group">
+            <input type="text" id="generated-user-id" readonly />
+            <button id="copy-user-id-btn" class="small-btn">Copy</button>
+          </div>
+
+          <label for="generated-seed">BIP-39 Recovery Seed Phrase (24 Words)</label>
+          <textarea id="generated-seed" readonly rows="3"></textarea>
+          <p class="warning-text">⚠️ Store this phrase safely! No central server can recover it for you.</p>
+
+          <button id="finish-create-btn" class="success-btn block-btn">Enter Zero-Day</button>
+        </div>
+      </div>
+
+      <!-- RECOVER ACCOUNT FORM -->
+      <div id="recover-account-form" class="auth-form hidden">
+        <label for="recover-display-name">Display Name</label>
+        <input type="text" id="recover-display-name" placeholder="e.g. Satoshi" autocomplete="off" />
+
+        <label for="recover-user-id">User ID (zd1...)</label>
+        <input type="text" id="recover-user-id" placeholder="zd1..." autocomplete="off" />
+
+        <label for="recover-seed">Seed Phrase (24 Words)</label>
+        <textarea id="recover-seed" placeholder="word1 word2 word3..." rows="3"></textarea>
+
+        <button id="finish-recover-btn" class="primary-btn block-btn">Recover Identity</button>
       </div>
     </div>
   </div>
 
-  <!-- Main App View -->
-  <div id="app-container" class="view-container">
-    <!-- Servers Sidebar -->
-    <nav class="servers-sidebar">
-      <div class="server-icon active" id="nav-dms" title="Direct Messages">DMs</div>
-      <div class="server-divider"></div>
-      <div id="server-list" class="server-list-container"></div>
-      <button id="btn-create-server" class="server-icon add-btn" title="Create Server">+</button>
-    </nav>
+  <!-- MAIN APP SHELL -->
+  <div id="app-shell" class="app-shell hidden">
+    <!-- LEFTMOST SIDEBAR (SERVERS / GROUPS & DMS) -->
+    <div class="server-sidebar">
+      <div id="btn-dm-view" class="server-icon active-server" title="Direct Messages">
+        <span>⚡</span>
+      </div>
+      <div class="divider"></div>
+      <div id="group-list" class="group-list"></div>
+      <button id="btn-add-group" class="server-icon action-icon" title="Create Groupchat">+</button>
+      <button id="btn-join-group" class="server-icon action-icon" title="Join Groupchat">🔗</button>
+    </div>
 
-    <!-- Channels / DMs Sidebar -->
-    <aside class="channels-sidebar">
-      <div class="sidebar-header">
-        <h2 id="current-context-title">Direct Messages</h2>
-        <button id="btn-add-friend" class="icon-btn" title="Add Peer">+</button>
+    <!-- SUB-SIDEBAR (DM / CHANNELS LIST) -->
+    <div class="sub-sidebar">
+      <div class="sub-sidebar-header">
+        <h3 id="sidebar-title">Direct Messages</h3>
       </div>
-      <div id="channels-list" class="channels-list">
-        <!-- Dynamic Channels / Direct Messages -->
+
+      <!-- DM / FRIENDS SECTION -->
+      <div id="dm-nav-section" class="sub-nav-section">
+        <div class="top-tab-bar">
+          <button id="nav-friends-btn" class="sub-tab-btn active">Friends</button>
+          <button id="nav-add-friend-btn" class="sub-tab-btn">+ Add Friend</button>
+        </div>
+        <div id="friends-list" class="items-list"></div>
       </div>
-      <div class="user-profile-bar">
-        <div class="user-avatar" id="user-initial">U</div>
-        <div class="user-info">
-          <span id="display-username">Anonymous</span>
-          <span class="user-status">P2P Node Active</span>
+
+      <!-- GROUP CHANNELS SECTION -->
+      <div id="group-nav-section" class="sub-nav-section hidden">
+        <div class="group-header-info">
+          <span id="active-group-name">Group Name</span>
+          <button id="btn-copy-group-id" class="small-btn">Copy ID</button>
+        </div>
+        <div id="owner-channel-controls" class="hidden">
+          <button id="btn-open-channel-modal" class="primary-btn block-btn">+ Create Channel</button>
+        </div>
+        <div id="channel-list" class="items-list"></div>
+      </div>
+
+      <!-- USER PROFILE FOOTER -->
+      <div class="user-card">
+        <div class="user-avatar">👤</div>
+        <div class="user-details">
+          <span id="user-card-name" class="user-card-name">Username</span>
+          <span id="user-card-id" class="user-card-id">zd1...</span>
         </div>
       </div>
-    </aside>
+    </div>
 
-    <!-- Chat Main Area -->
-    <main class="chat-main">
-      <header class="chat-header">
-        <span id="active-chat-title">Select a conversation or server channel</span>
-      </header>
-      <div id="messages-container" class="messages-container">
-        <div class="welcome-message">
-          <h3>Secure Channel Ready</h3>
-          <p>End-to-end encrypted connection established across local nodes.</p>
-        </div>
+    <!-- CHAT VIEWPORT -->
+    <div class="chat-viewport">
+      <div class="chat-header">
+        <h4 id="chat-title">Select a Direct Message or Channel</h4>
+        <span class="p2p-badge">🔒 P2P E2EE Mesh</span>
       </div>
-      <div class="chat-input-wrapper">
-        <input type="text" id="message-input" placeholder="Message securely..." autocomplete="off" />
-        <button id="btn-send-message" class="btn send-btn">Send</button>
+
+      <div id="chat-messages" class="chat-messages">
+        <div class="system-message">Welcome to Zero-Day Chat. All messages are encrypted peer-to-peer.</div>
       </div>
-    </main>
+
+      <div class="chat-input-area">
+        <input type="text" id="message-input" placeholder="Type a secure P2P message..." autocomplete="off" />
+        <button id="btn-send-message" class="primary-btn">Send</button>
+      </div>
+    </div>
   </div>
 
-  <!-- Dynamic Modal Overlay -->
-  <div id="modal-overlay" class="modal-overlay hidden">
+  <!-- MODAL: CREATE GROUP -->
+  <div id="modal-create-group" class="modal-overlay hidden">
     <div class="modal-box">
-      <h3 id="modal-title">Action</h3>
-      <input type="text" id="modal-input" placeholder="Enter value..." autocomplete="off" />
+      <h3>Create New Groupchat</h3>
+      <label for="input-group-name">Group Name</label>
+      <input type="text" id="input-group-name" placeholder="e.g. Cyber Squad" autocomplete="off" />
       <div class="modal-actions">
-        <button id="modal-cancel" class="btn secondary">Cancel</button>
-        <button id="modal-submit" class="btn primary">Confirm</button>
+        <button id="close-create-group" class="secondary-btn">Cancel</button>
+        <button id="submit-create-group" class="primary-btn">Create</button>
       </div>
     </div>
   </div>
 
-  <script src="main.js" type="module"></script>
+  <!-- MODAL: JOIN GROUP -->
+  <div id="modal-join-group" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3>Join Groupchat</h3>
+      <label for="input-join-group-id">Group ID Link</label>
+      <input type="text" id="input-join-group-id" placeholder="zd-grp-..." autocomplete="off" />
+      <div class="modal-actions">
+        <button id="close-join-group" class="secondary-btn">Cancel</button>
+        <button id="submit-join-group" class="primary-btn">Join Group</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CREATE CHANNEL (OWNER ONLY) -->
+  <div id="modal-create-channel" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3>Create Channel (Owner Only)</h3>
+      <label for="input-channel-name">Channel Name</label>
+      <input type="text" id="input-channel-name" placeholder="e.g. announcements" autocomplete="off" />
+      <label for="input-channel-category">Category</label>
+      <input type="text" id="input-channel-category" placeholder="e.g. TEXT CHANNELS" autocomplete="off" />
+      <div class="modal-actions">
+        <button id="close-create-channel" class="secondary-btn">Cancel</button>
+        <button id="submit-create-channel" class="primary-btn">Create Channel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD FRIEND -->
+  <div id="modal-add-friend" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3>Add Friend</h3>
+      <label for="input-friend-id">Friend User ID (zd1...)</label>
+      <input type="text" id="input-friend-id" placeholder="zd1..." autocomplete="off" />
+      <label for="input-friend-name">Display Name (Optional)</label>
+      <input type="text" id="input-friend-name" placeholder="e.g. Alice" autocomplete="off" />
+      <div class="modal-actions">
+        <button id="close-add-friend" class="secondary-btn">Cancel</button>
+        <button id="submit-add-friend" class="primary-btn">Add Friend</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

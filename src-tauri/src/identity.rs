@@ -1,28 +1,68 @@
-use bip39::{Mnemonic, Language};
-use rand::RngCore;
-use rand::rngs::OsRng;
-use serde::{Serialize, Deserialize};
+use bip39::{Language, Mnemonic};
+use ed25519_dalek::{SigningKey, VerifyingKey};
+use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct IdentityInfo {
-    pub username: String,
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct IdentityKeys {
+    pub user_id: String,
+    pub display_name: String,
     pub seed_phrase: String,
-    pub public_key: String,
+    pub public_key_hex: String,
+    pub private_key_hex: String,
 }
 
-pub fn generate_identity(username: String) -> Result<IdentityInfo, String> {
-    let mut entropy = [0u8; 32];
-    OsRng.fill_bytes(&mut entropy);
-    
-    let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy)
-        .map_err(|e| e.to_string())?;
+pub fn generate_new_identity(display_name: String) -> Result<IdentityKeys, String> {
+    let mnemonic = Mnemonic::generate_in(Language::English, 24)
+        .map_err(|e| format!("Failed to generate 24-word seed phrase: {}", e))?;
 
     let seed_phrase = mnemonic.to_string();
-    let pub_key_mock = format!("0x{}", hex::encode(&entropy[0..8]));
+    derive_identity_from_seed(display_name, &seed_phrase)
+}
 
-    Ok(IdentityInfo {
-        username,
-        seed_phrase,
-        public_key: pub_key_mock,
+pub fn restore_identity(
+    display_name: String,
+    user_id: String,
+    seed_phrase: String,
+) -> Result<IdentityKeys, String> {
+    let clean_phrase = seed_phrase.trim();
+    let mnemonic: Mnemonic = clean_phrase
+        .parse()
+        .map_err(|_| "Invalid BIP-39 seed phrase. Please check your 24 words.".to_string())?;
+
+    let derived = derive_identity_from_seed(display_name, &mnemonic.to_string())?;
+
+    let clean_user_id = user_id.trim();
+    if !clean_user_id.is_empty() && clean_user_id != derived.user_id {
+        return Err("Account ID does not match the key derived from this seed phrase.".to_string());
+    }
+
+    Ok(derived)
+}
+
+pub fn derive_identity_from_seed(display_name: String, seed_phrase: &str) -> Result<IdentityKeys, String> {
+    let mnemonic: Mnemonic = seed_phrase
+        .parse()
+        .map_err(|_| "Failed to parse seed phrase.".to_string())?;
+
+    let seed = mnemonic.to_seed("");
+    let seed_bytes = seed.as_bytes();
+    let secret_bytes: [u8; 32] = seed_bytes[0..32]
+        .try_into()
+        .map_err(|_| "Failed to derive secret key from seed.".to_string())?;
+
+    let signing_key = SigningKey::from_bytes(&secret_bytes);
+    let verifying_key: VerifyingKey = signing_key.verifying_key();
+
+    let pub_key_hex = hex::encode(verifying_key.as_bytes());
+    let priv_key_hex = hex::encode(signing_key.to_bytes());
+
+    let user_id = format!("zd1{}", &pub_key_hex[..32]);
+
+    Ok(IdentityKeys {
+        user_id,
+        display_name: display_name.trim().to_string(),
+        seed_phrase: seed_phrase.to_string(),
+        public_key_hex: pub_key_hex,
+        private_key_hex: priv_key_hex,
     })
 }

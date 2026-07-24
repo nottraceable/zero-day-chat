@@ -1,233 +1,365 @@
 const { invoke } = window.__TAURI__.tauri;
 
-document.addEventListener("DOMContentLoaded", async () => {
-  const usernameInput = document.getElementById("username-input");
-  const btnNextSeed = document.getElementById("btn-next-seed");
-  const btnFinish = document.getElementById("btn-finish-onboarding");
-  const seedDisplay = document.getElementById("seed-display");
-  
-  let currentUsername = "";
-  let servers = [];
-  let friends = [];
-  let activeView = { type: "dm", id: null };
-  let messagesStore = {};
+let appState = null;
+let activeTargetId = null;
+let activeChannelId = null;
+let activeGroup = null;
 
-  btnNextSeed.addEventListener("click", async () => {
-    currentUsername = usernameInput.value.trim();
-    if (!currentUsername) {
-      alert("Please enter a valid handle.");
-      return;
+window.addEventListener('DOMContentLoaded', async () => {
+  // 1. INITIALIZE & CHECK EXISTING LOCAL STATE
+  try {
+    appState = await invoke('get_current_data');
+    if (appState && appState.identity) {
+      launchApp();
     }
+  } catch (err) {
+    console.error('Failed to load app data:', err);
+  }
+
+  // 2. AUTH TAB SWITCHING
+  const tabCreateBtn = document.getElementById('tab-create-btn');
+  const tabRecoverBtn = document.getElementById('tab-recover-btn');
+  const createForm = document.getElementById('create-account-form');
+  const recoverForm = document.getElementById('recover-account-form');
+
+  tabCreateBtn.addEventListener('click', () => {
+    tabCreateBtn.classList.add('active');
+    tabRecoverBtn.classList.remove('active');
+    createForm.classList.remove('hidden');
+    recoverForm.classList.add('hidden');
+  });
+
+  tabRecoverBtn.addEventListener('click', () => {
+    tabRecoverBtn.classList.add('active');
+    tabCreateBtn.classList.remove('active');
+    recoverForm.classList.remove('hidden');
+    createForm.classList.add('hidden');
+  });
+
+  // 3. GENERATE ACCOUNT & SEED
+  document.getElementById('gen-seed-btn').addEventListener('click', async () => {
+    const displayName = document.getElementById('create-display-name').value.trim();
+    if (!displayName) return alert('Please choose a Display Name.');
 
     try {
-      const identity = await invoke("create_identity", { username: currentUsername });
-      seedDisplay.innerHTML = "";
-      identity.seed_phrase.split(" ").forEach(word => {
-        const span = document.createElement("div");
-        span.className = "seed-word";
-        span.textContent = word;
-        seedDisplay.appendChild(span);
-      });
+      appState = await invoke('create_account', { displayName });
 
-      document.getElementById("step-username").classList.remove("active");
-      document.getElementById("step-seed").classList.add("active");
+      document.getElementById('generated-user-id').value = appState.identity.user_id;
+      document.getElementById('generated-seed').value = appState.identity.seed_phrase;
+      document.getElementById('seed-display-area').classList.remove('hidden');
     } catch (err) {
-      alert("Error generating identity: " + err);
+      alert('Account creation error: ' + err);
     }
   });
 
-  btnFinish.addEventListener("click", () => {
-    document.getElementById("onboarding-container").classList.remove("active");
-    document.getElementById("app-container").classList.add("active");
-    
-    document.getElementById("display-username").textContent = currentUsername;
-    document.getElementById("user-initial").textContent = currentUsername.charAt(0).toUpperCase();
-    
-    renderSidebar();
+  document.getElementById('copy-user-id-btn').addEventListener('click', () => {
+    const userIdInput = document.getElementById('generated-user-id');
+    navigator.clipboard.writeText(userIdInput.value);
+    alert('User ID copied to clipboard!');
   });
 
-  // Navigation & Sidebar Logic
-  document.getElementById("nav-dms").addEventListener("click", () => {
-    activeView = { type: "dm", id: null };
-    document.getElementById("current-context-title").textContent = "Direct Messages";
-    renderSidebar();
-    clearChatArea();
+  document.getElementById('finish-create-btn').addEventListener('click', () => {
+    launchApp();
   });
 
-  document.getElementById("btn-add-friend").addEventListener("click", () => {
-    openModal("Add Friend by Peer ID", "Peer ID or PublicKey...", (val) => {
-      if (val) {
-        friends.push({ id: val, name: val.substring(0, 8) + "..." });
-        renderSidebar();
-      }
-    });
+  // 4. RECOVER ACCOUNT
+  document.getElementById('finish-recover-btn').addEventListener('click', async () => {
+    const displayName = document.getElementById('recover-display-name').value.trim();
+    const userId = document.getElementById('recover-user-id').value.trim();
+    const seedPhrase = document.getElementById('recover-seed').value.trim();
+
+    if (!displayName || !seedPhrase) return alert('Display Name and Seed Phrase are required.');
+
+    try {
+      appState = await invoke('recover_account', { displayName, userId, seedPhrase });
+      launchApp();
+    } catch (err) {
+      alert('Account recovery error: ' + err);
+    }
   });
 
-  document.getElementById("btn-create-server").addEventListener("click", () => {
-    openModal("Create Server", "Server Name...", (serverName) => {
-      if (serverName) {
-        const newServer = {
-          id: Date.now().toString(),
-          name: serverName,
-          initial: serverName.charAt(0).toUpperCase(),
-          channels: [
-            { id: "general", name: "general", category: "Text Channels" }
-          ]
-        };
-        servers.push(newServer);
-        renderServerIcons();
-      }
-    });
+  // 5. LAUNCH MAIN SHELL
+  function launchApp() {
+    document.getElementById('auth-modal').classList.add('hidden');
+    document.getElementById('app-shell').classList.remove('hidden');
+
+    document.getElementById('user-card-name').innerText = appState.identity.display_name;
+    document.getElementById('user-card-id').innerText = appState.identity.user_id.slice(0, 12) + '...';
+
+    renderFriends();
+    renderGroups();
+  }
+
+  // 6. DIRECT MESSAGES VIEW SWITCHER
+  document.getElementById('btn-dm-view').addEventListener('click', () => {
+    activeGroup = null;
+    activeTargetId = null;
+    activeChannelId = null;
+
+    document.getElementById('btn-dm-view').classList.add('active-server');
+    document.querySelectorAll('.group-list .server-icon').forEach(el => el.classList.remove('active-server'));
+
+    document.getElementById('group-nav-section').classList.add('hidden');
+    document.getElementById('dm-nav-section').classList.remove('hidden');
+    document.getElementById('sidebar-title').innerText = 'Direct Messages';
+    document.getElementById('chat-title').innerText = 'Select a Direct Message';
+
+    renderMessages();
   });
 
-  function renderServerIcons() {
-    const list = document.getElementById("server-list");
-    list.innerHTML = "";
-    servers.forEach(srv => {
-      const div = document.createElement("div");
-      div.className = "server-icon";
-      div.textContent = srv.initial;
-      div.title = srv.name;
-      div.addEventListener("click", () => {
-        activeView = { type: "server", id: srv.id, channelId: srv.channels[0].id };
-        document.getElementById("current-context-title").textContent = srv.name;
-        renderSidebar();
-        renderChatMessages();
+  // 7. MODALS
+  const toggleModal = (modalId, show) => {
+    document.getElementById(modalId).classList.toggle('hidden', !show);
+  };
+
+  document.getElementById('btn-add-group').addEventListener('click', () => toggleModal('modal-create-group', true));
+  document.getElementById('close-create-group').addEventListener('click', () => toggleModal('modal-create-group', false));
+
+  document.getElementById('btn-join-group').addEventListener('click', () => toggleModal('modal-join-group', true));
+  document.getElementById('close-join-group').addEventListener('click', () => toggleModal('modal-join-group', false));
+
+  document.getElementById('nav-add-friend-btn').addEventListener('click', () => toggleModal('modal-add-friend', true));
+  document.getElementById('close-add-friend').addEventListener('click', () => toggleModal('modal-add-friend', false));
+
+  document.getElementById('btn-open-channel-modal').addEventListener('click', () => toggleModal('modal-create-channel', true));
+  document.getElementById('close-create-channel').addEventListener('click', () => toggleModal('modal-create-channel', false));
+
+  // 8. CREATE GROUPCHAT
+  document.getElementById('submit-create-group').addEventListener('click', async () => {
+    const name = document.getElementById('input-group-name').value.trim();
+    if (!name) return;
+
+    try {
+      appState = await invoke('create_group', { name });
+      renderGroups();
+      toggleModal('modal-create-group', false);
+      document.getElementById('input-group-name').value = '';
+    } catch (err) {
+      alert('Error creating group: ' + err);
+    }
+  });
+
+  // 9. JOIN GROUPCHAT
+  document.getElementById('submit-join-group').addEventListener('click', async () => {
+    const groupId = document.getElementById('input-join-group-id').value.trim();
+    if (!groupId) return;
+
+    try {
+      appState = await invoke('join_group', { groupId });
+      renderGroups();
+      toggleModal('modal-join-group', false);
+      document.getElementById('input-join-group-id').value = '';
+    } catch (err) {
+      alert('Error joining group: ' + err);
+    }
+  });
+
+  // 10. CREATE CHANNEL (OWNER PERMISSION VERIFICATION)
+  document.getElementById('submit-create-channel').addEventListener('click', async () => {
+    const channelName = document.getElementById('input-channel-name').value.trim();
+    const category = document.getElementById('input-channel-category').value.trim();
+
+    if (!channelName || !activeGroup) return;
+
+    try {
+      appState = await invoke('create_channel', {
+        groupId: activeGroup.id,
+        channelName,
+        category
       });
-      list.appendChild(div);
-    });
-  }
 
-  function renderSidebar() {
-    const channelsList = document.getElementById("channels-list");
-    channelsList.innerHTML = "";
-
-    if (activeView.type === "dm") {
-      const header = document.createElement("div");
-      header.className = "category-header";
-      header.textContent = "Direct Messages";
-      channelsList.appendChild(header);
-
-      if (friends.length === 0) {
-        const empty = document.createElement("div");
-        empty.className = "channel-item";
-        empty.style.color = "var(--text-muted)";
-        empty.textContent = "No peers added yet.";
-        channelsList.appendChild(empty);
-      } else {
-        friends.forEach(f => {
-          const item = document.createElement("div");
-          item.className = "friend-item";
-          if (activeView.id === f.id) item.style.background = "rgba(255,255,255,0.05)";
-          item.textContent = f.name;
-          item.addEventListener("click", () => {
-            activeView = { type: "dm", id: f.id };
-            document.getElementById("active-chat-title").textContent = f.name;
-            renderChatMessages();
-          });
-          channelsList.appendChild(item);
-        });
-      }
-    } else if (activeView.type === "server") {
-      const srv = servers.find(s => s.id === activeView.id);
-      if (srv) {
-        const header = document.createElement("div");
-        header.className = "category-header";
-        header.textContent = "Text Channels";
-        channelsList.appendChild(header);
-
-        srv.channels.forEach(ch => {
-          const item = document.createElement("div");
-          item.className = "channel-item";
-          if (activeView.channelId === ch.id) item.style.background = "rgba(255,255,255,0.05)";
-          item.textContent = "# " + ch.name;
-          item.addEventListener("click", () => {
-            activeView.channelId = ch.id;
-            document.getElementById("active-chat-title").textContent = "# " + ch.name;
-            renderSidebar();
-            renderChatMessages();
-          });
-          channelsList.appendChild(item);
-        });
-      }
+      activeGroup = appState.groups.find(g => g.id === activeGroup.id);
+      renderChannels(activeGroup);
+      toggleModal('modal-create-channel', false);
+      document.getElementById('input-channel-name').value = '';
+      document.getElementById('input-channel-category').value = '';
+    } catch (err) {
+      alert('Permission Error: ' + err);
     }
-  }
-
-  function clearChatArea() {
-    document.getElementById("active-chat-title").textContent = "Select a conversation or server channel";
-    document.getElementById("messages-container").innerHTML = `
-      <div class="welcome-message">
-        <h3>Secure Channel Ready</h3>
-        <p>End-to-end encrypted connection established across local nodes.</p>
-      </div>
-    `;
-  }
-
-  function renderChatMessages() {
-    const container = document.getElementById("messages-container");
-    container.innerHTML = "";
-    const key = activeView.type === "dm" ? `dm_${activeView.id}` : `srv_${activeView.id}_${activeView.channelId}`;
-    const msgs = messagesStore[key] || [];
-
-    if (msgs.length === 0) {
-      container.innerHTML = `<div class="welcome-message"><p>Beginning of encrypted transcript.</p></div>`;
-      return;
-    }
-
-    msgs.forEach(m => {
-      const bubble = document.createElement("div");
-      bubble.className = "message-bubble";
-      bubble.innerHTML = `<div class="message-author">${m.author}</div><div class="message-text">${m.text}</div>`;
-      container.appendChild(bubble);
-    });
-    container.scrollTop = container.scrollHeight;
-  }
-
-  // Sending Messages
-  document.getElementById("btn-send-message").addEventListener("click", sendMessage);
-  document.getElementById("message-input").addEventListener("keypress", (e) => {
-    if (e.key === "Enter") sendMessage();
   });
 
-  function sendMessage() {
-    const input = document.getElementById("message-input");
-    const text = input.value.trim();
-    if (!text) return;
+  // 11. ADD FRIEND
+  document.getElementById('submit-add-friend').addEventListener('click', async () => {
+    const friendId = document.getElementById('input-friend-id').value.trim();
+    const displayName = document.getElementById('input-friend-name').value.trim();
 
-    const key = activeView.type === "dm" ? `dm_${activeView.id}` : `srv_${activeView.id}_${activeView.channelId}`;
-    if (!messagesStore[key]) messagesStore[key] = [];
+    if (!friendId) return;
 
-    messagesStore[key].push({ author: currentUsername, text });
-    input.value = "";
-    renderChatMessages();
+    try {
+      appState = await invoke('add_friend', { friendId, displayName });
+      renderFriends();
+      toggleModal('modal-add-friend', false);
+      document.getElementById('input-friend-id').value = '';
+      document.getElementById('input-friend-name').value = '';
+    } catch (err) {
+      alert('Error: ' + err);
+    }
+  });
+
+  // 12. RENDER FRIENDS
+  function renderFriends() {
+    const friendsContainer = document.getElementById('friends-list');
+    friendsContainer.innerHTML = '';
+
+    (appState.friends || []).forEach(friend => {
+      const item = document.createElement('div');
+      item.className = 'list-item';
+      if (activeTargetId === friend.user_id) item.classList.add('active');
+      item.innerText = `💬 ${friend.display_name}`;
+
+      item.onclick = () => {
+        activeTargetId = friend.user_id;
+        activeChannelId = null;
+
+        document.querySelectorAll('#friends-list .list-item').forEach(el => el.classList.remove('active'));
+        item.classList.add('active');
+
+        document.getElementById('chat-title').innerText = `@ ${friend.display_name}`;
+        renderMessages();
+      };
+
+      friendsContainer.appendChild(item);
+    });
   }
 
-  // Modal Utility
-  function openModal(title, placeholder, callback) {
-    document.getElementById("modal-title").textContent = title;
-    const input = document.getElementById("modal-input");
-    input.value = "";
-    input.placeholder = placeholder;
-    const overlay = document.getElementById("modal-overlay");
-    overlay.classList.remove("hidden");
+  // 13. RENDER GROUPS
+  function renderGroups() {
+    const groupListContainer = document.getElementById('group-list');
+    groupListContainer.innerHTML = '';
 
-    const submitBtn = document.getElementById("modal-submit");
-    const cancelBtn = document.getElementById("modal-cancel");
+    (appState.groups || []).forEach(group => {
+      const icon = document.createElement('div');
+      icon.className = 'server-icon';
+      if (activeGroup && activeGroup.id === group.id) icon.classList.add('active-server');
 
-    const cleanup = () => {
-      overlay.classList.add("hidden");
-      submitBtn.replaceWith(submitBtn.cloneNode(true));
-      cancelBtn.replaceWith(cancelBtn.cloneNode(true));
-    };
+      icon.innerText = group.name.substring(0, 2).toUpperCase();
+      icon.title = group.name;
 
-    document.getElementById("modal-submit").addEventListener("click", () => {
-      const val = input.value.trim();
-      callback(val);
-      cleanup();
-    }, { once: true });
+      icon.onclick = () => {
+        activeGroup = group;
+        activeTargetId = group.id;
 
-    document.getElementById("modal-cancel").addEventListener("click", () => {
-      cleanup();
-    }, { once: true });
+        document.getElementById('btn-dm-view').classList.remove('active-server');
+        document.querySelectorAll('.group-list .server-icon').forEach(el => el.classList.remove('active-server'));
+        icon.classList.add('active-server');
+
+        document.getElementById('dm-nav-section').classList.add('hidden');
+        document.getElementById('group-nav-section').classList.remove('hidden');
+        document.getElementById('sidebar-title').innerText = 'Channels';
+        document.getElementById('active-group-name').innerText = group.name;
+
+        document.getElementById('btn-copy-group-id').onclick = () => {
+          navigator.clipboard.writeText(group.id);
+          alert('Group ID copied to clipboard: ' + group.id);
+        };
+
+        const isOwner = group.owner_id === appState.identity.user_id;
+        document.getElementById('owner-channel-controls').classList.toggle('hidden', !isOwner);
+
+        renderChannels(group);
+      };
+
+      groupListContainer.appendChild(icon);
+    });
   }
+
+  // 14. RENDER CHANNELS IN CATEGORIES
+  function renderChannels(group) {
+    const channelListContainer = document.getElementById('channel-list');
+    channelListContainer.innerHTML = '';
+
+    const categories = {};
+    group.channels.forEach(ch => {
+      const catKey = ch.category || 'TEXT CHANNELS';
+      if (!categories[catKey]) categories[catKey] = [];
+      categories[catKey].push(ch);
+    });
+
+    for (const [catName, channels] of Object.entries(categories)) {
+      const catHeader = document.createElement('div');
+      catHeader.className = 'category-header';
+      catHeader.innerText = catName;
+      channelListContainer.appendChild(catHeader);
+
+      channels.forEach(ch => {
+        const item = document.createElement('div');
+        item.className = 'list-item';
+        if (activeChannelId === ch.id) item.classList.add('active');
+
+        item.innerText = `# ${ch.name}`;
+
+        item.onclick = () => {
+          activeChannelId = ch.id;
+          document.querySelectorAll('#channel-list .list-item').forEach(el => el.classList.remove('active'));
+          item.classList.add('active');
+
+          document.getElementById('chat-title').innerText = `# ${ch.name}`;
+          renderMessages();
+        };
+
+        channelListContainer.appendChild(item);
+      });
+    }
+
+    if (group.channels.length > 0 && !activeChannelId) {
+      activeChannelId = group.channels[0].id;
+      document.getElementById('chat-title').innerText = `# ${group.channels[0].name}`;
+      renderMessages();
+    }
+  }
+
+  // 15. RENDER MESSAGES
+  function renderMessages() {
+    const chatContainer = document.getElementById('chat-messages');
+    chatContainer.innerHTML = '<div class="system-message">Welcome to Zero-Day Chat. All messages are encrypted peer-to-peer.</div>';
+
+    if (!activeTargetId) return;
+
+    const filtered = (appState.messages || []).filter(m => {
+      if (activeGroup) {
+        return m.target_id === activeTargetId && m.channel_id === activeChannelId;
+      } else {
+        return m.target_id === activeTargetId || m.sender_id === activeTargetId;
+      }
+    });
+
+    filtered.forEach(msg => {
+      const isMine = msg.sender_id === appState.identity.user_id;
+      const card = document.createElement('div');
+      card.className = `message-card ${isMine ? 'mine' : ''}`;
+      card.innerHTML = `
+        <div class="message-sender">${msg.sender_name}</div>
+        <div class="message-content">${msg.content}</div>
+      `;
+      chatContainer.appendChild(card);
+    });
+
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  }
+
+  // 16. SEND MESSAGE
+  const sendMessage = async () => {
+    const input = document.getElementById('message-input');
+    const content = input.value.trim();
+
+    if (!content || !activeTargetId) return;
+
+    try {
+      appState = await invoke('send_message', {
+        targetId: activeTargetId,
+        channelId: activeChannelId,
+        content
+      });
+
+      renderMessages();
+      input.value = '';
+    } catch (err) {
+      alert('Error sending message: ' + err);
+    }
+  };
+
+  document.getElementById('btn-send-message').addEventListener('click', sendMessage);
+  document.getElementById('message-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendMessage();
+  });
 });
