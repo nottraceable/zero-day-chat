@@ -6,12 +6,11 @@ mod network;
 
 use identity::Identity;
 use storage::{AppData, Channel, Friend, Group, Message, StorageManager, FriendRequest, IdentityData};
-use network::NetworkPacket;
+use network::{NetworkPacket, NetworkCommand};
 use std::sync::{Arc, Mutex};
 use tauri::{State, Manager};
 use tokio::sync::mpsc;
 
-// Convert Identity into IdentityData for storage serialization
 impl From<Identity> for IdentityData {
     fn from(id: Identity) -> Self {
         IdentityData {
@@ -26,13 +25,24 @@ impl From<Identity> for IdentityData {
 struct AppState {
     data: Arc<Mutex<AppData>>,
     storage: StorageManager,
-    net_tx: mpsc::UnboundedSender<NetworkPacket>,
+    net_tx: mpsc::UnboundedSender<NetworkCommand>,
 }
 
 #[tauri::command]
 fn get_current_data(state: State<'_, AppState>) -> Result<AppData, String> {
     let data = state.data.lock().unwrap();
     Ok(data.clone())
+}
+
+#[tauri::command]
+fn connect_peer(multiaddr: String, state: State<'_, AppState>) -> Result<String, String> {
+    let clean = multiaddr.trim().to_string();
+    if clean.is_empty() {
+        return Err("Multiaddress cannot be empty.".into());
+    }
+    state.net_tx.send(NetworkCommand::ConnectPeer(clean.clone()))
+        .map_err(|e| e.to_string())?;
+    Ok(format!("Dialing peer {}", clean))
 }
 
 #[tauri::command]
@@ -114,7 +124,7 @@ fn send_friend_request(target_id: String, state: State<'_, AppState>) -> Result<
         target_id: clean_target,
     };
 
-    let _ = state.net_tx.send(NetworkPacket::FriendRequestPacket { request: req });
+    let _ = state.net_tx.send(NetworkCommand::SendPacket(NetworkPacket::FriendRequestPacket { request: req }));
     Ok(data.clone())
 }
 
@@ -139,13 +149,13 @@ fn accept_friend_request(request_id: String, state: State<'_, AppState>) -> Resu
 
     state.storage.save(&data)?;
 
-    let _ = state.net_tx.send(NetworkPacket::FriendAcceptPacket {
+    let _ = state.net_tx.send(NetworkCommand::SendPacket(NetworkPacket::FriendAcceptPacket {
         friend: Friend {
             user_id: identity.user_id,
             display_name: identity.display_name,
         },
         target_id: req.sender_id,
-    });
+    }));
 
     Ok(data.clone())
 }
@@ -278,7 +288,7 @@ fn send_message(target_id: String, channel_id: Option<String>, content: String, 
     data.messages.push(msg.clone());
     state.storage.save(&data)?;
 
-    let _ = state.net_tx.send(NetworkPacket::ChatMessagePacket { message: msg });
+    let _ = state.net_tx.send(NetworkCommand::SendPacket(NetworkPacket::ChatMessagePacket { message: msg }));
     Ok(data.clone())
 }
 
@@ -315,7 +325,8 @@ fn main() {
             leave_group,
             delete_group,
             create_channel,
-            send_message
+            send_message,
+            connect_peer
         ])
         .run(tauri::generate_context!())
         .expect("error while running zero-day-chat application");

@@ -70,6 +70,7 @@
       <div id="group-list" class="group-list"></div>
       <button id="btn-add-group" class="server-icon action-icon" title="Create Groupchat">+</button>
       <button id="btn-join-group" class="server-icon action-icon" title="Join Groupchat">🔗</button>
+      <button id="btn-connect-peer-modal" class="server-icon action-icon" title="Dial WAN/IP Peer">🌐</button>
     </div>
 
     <!-- SUB-SIDEBAR (DM / CHANNELS LIST) -->
@@ -148,6 +149,12 @@
           <button id="btn-copy-settings-id" class="small-btn">Copy</button>
         </div>
 
+        <label>P2P Multiaddress (Share for WAN Connection)</label>
+        <div class="input-copy-group">
+          <input type="text" id="settings-p2p-addr" readonly placeholder="Waiting for listen address..." />
+          <button id="btn-copy-p2p-addr" class="small-btn">Copy</button>
+        </div>
+
         <label>BIP-39 Seed Phrase</label>
         <div class="input-copy-group">
           <input type="password" id="settings-seed-phrase" readonly />
@@ -168,6 +175,20 @@
       <div class="modal-actions">
         <button id="btn-logout" class="danger-btn">Logout Identity</button>
         <button id="close-settings" class="secondary-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CONNECT PEER DIRECTLY (WAN/MULTIADDRESS) -->
+  <div id="modal-connect-peer" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3>Dial P2P Peer Address</h3>
+      <p style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 12px;">Enter remote peer's multiaddress (e.g. <code>/ip4/x.x.x.x/tcp/4001/p2p/...</code>):</p>
+      <label for="input-connect-multiaddr">Multiaddress</label>
+      <input type="text" id="input-connect-multiaddr" placeholder="/ip4/1.2.3.4/tcp/..." autocomplete="off" />
+      <div class="modal-actions">
+        <button id="close-connect-peer" class="secondary-btn">Cancel</button>
+        <button id="submit-connect-peer" class="primary-btn">Connect Peer</button>
       </div>
     </div>
   </div>

@@ -5,6 +5,7 @@ let appState = null;
 let activeTargetId = null;
 let activeChannelId = null;
 let activeGroup = null;
+let myListenMultiaddr = "";
 
 window.addEventListener('DOMContentLoaded', async () => {
   // 1. INITIALIZE & LISTEN FOR P2P NETWORK EVENTS
@@ -17,11 +18,30 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (listen) {
+      // Receive local multiaddress string from Rust swarm
+      await listen('p2p_listen_addr', (event) => {
+        myListenMultiaddr = event.payload;
+        const p2pInput = document.getElementById('settings-p2p-addr');
+        if (p2pInput) p2pInput.value = myListenMultiaddr;
+      });
+
+      // P2P network packet event
       await listen('p2p_event', async () => {
         if (invoke) {
           appState = await invoke('get_current_data');
           renderFriends();
           renderPendingRequests();
+          renderMessages();
+        }
+      });
+
+      // App state fully updated event
+      await listen('app-data-updated', (event) => {
+        if (event.payload) {
+          appState = event.payload;
+          renderFriends();
+          renderPendingRequests();
+          renderGroups();
           renderMessages();
         }
       });
@@ -146,6 +166,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-join-group').addEventListener('click', () => toggleModal('modal-join-group', true));
   document.getElementById('close-join-group').addEventListener('click', () => toggleModal('modal-join-group', false));
 
+  document.getElementById('btn-connect-peer-modal').addEventListener('click', () => toggleModal('modal-connect-peer', true));
+  document.getElementById('close-connect-peer').addEventListener('click', () => toggleModal('modal-connect-peer', false));
+
   document.getElementById('nav-add-friend-btn').addEventListener('click', () => toggleModal('modal-add-friend', true));
   document.getElementById('close-add-friend').addEventListener('click', () => toggleModal('modal-add-friend', false));
 
@@ -158,6 +181,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     document.getElementById('settings-display-name').textContent = appState.identity.display_name;
     document.getElementById('settings-user-id').value = appState.identity.user_id;
+    document.getElementById('settings-p2p-addr').value = myListenMultiaddr || 'Discovering listen address...';
     document.getElementById('settings-seed-phrase').value = appState.identity.seed_phrase;
 
     const groupMgmt = document.getElementById('group-management-actions');
@@ -179,6 +203,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-copy-settings-id').addEventListener('click', () => {
     navigator.clipboard.writeText(document.getElementById('settings-user-id').value);
     alert('User ID copied to clipboard!');
+  });
+
+  document.getElementById('btn-copy-p2p-addr').addEventListener('click', () => {
+    const val = document.getElementById('settings-p2p-addr').value;
+    if (val) {
+      navigator.clipboard.writeText(val);
+      alert('P2P Multiaddress copied!');
+    }
   });
 
   document.getElementById('btn-toggle-seed-vis').addEventListener('click', (e) => {
@@ -233,7 +265,22 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 9. CREATE GROUPCHAT
+  // 9. DIAL WAN / P2P PEER MULTIADDRESS
+  document.getElementById('submit-connect-peer').addEventListener('click', async () => {
+    const multiaddr = document.getElementById('input-connect-multiaddr').value.trim();
+    if (!multiaddr) return;
+
+    try {
+      const res = await invoke('connect_peer', { multiaddr });
+      alert(res);
+      toggleModal('modal-connect-peer', false);
+      document.getElementById('input-connect-multiaddr').value = '';
+    } catch (err) {
+      alert('Failed to dial peer: ' + err);
+    }
+  });
+
+  // 10. CREATE GROUPCHAT
   document.getElementById('submit-create-group').addEventListener('click', async () => {
     const name = document.getElementById('input-group-name').value.trim();
     if (!name) return;
@@ -248,7 +295,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 10. JOIN GROUPCHAT
+  // 11. JOIN GROUPCHAT
   document.getElementById('submit-join-group').addEventListener('click', async () => {
     const groupId = document.getElementById('input-join-group-id').value.trim();
     if (!groupId) return;
@@ -263,7 +310,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 11. SEND P2P FRIEND REQUEST
+  // 12. SEND P2P FRIEND REQUEST
   document.getElementById('submit-add-friend').addEventListener('click', async () => {
     const friendId = document.getElementById('input-friend-id').value.trim();
     if (!friendId) return;
@@ -278,7 +325,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 12. CREATE CHANNEL
+  // 13. CREATE CHANNEL
   document.getElementById('submit-create-channel').addEventListener('click', async () => {
     const channelName = document.getElementById('input-channel-name').value.trim();
     const category = document.getElementById('input-channel-category').value.trim();
@@ -302,7 +349,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 13. RENDER FRIENDS
+  // 14. RENDER FRIENDS
   function renderFriends() {
     const friendsContainer = document.getElementById('friends-list');
     friendsContainer.innerHTML = '';
@@ -328,7 +375,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 14. RENDER PENDING FRIEND REQUESTS
+  // 15. RENDER PENDING FRIEND REQUESTS
   function renderPendingRequests() {
     const pendingContainer = document.getElementById('pending-list');
     const badge = document.getElementById('pending-badge');
@@ -345,7 +392,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     requests.forEach(req => {
       const item = document.createElement('div');
       item.className = 'list-item pending-item';
-      
+
       const text = document.createElement('span');
       text.textContent = `📩 ${req.sender_name}`;
 
@@ -370,7 +417,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 15. RENDER GROUPS
+  // 16. RENDER GROUPS
   function renderGroups() {
     const groupListContainer = document.getElementById('group-list');
     groupListContainer.innerHTML = '';
@@ -412,7 +459,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 16. RENDER CHANNELS
+  // 17. RENDER CHANNELS
   function renderChannels(group) {
     const channelListContainer = document.getElementById('channel-list');
     channelListContainer.innerHTML = '';
@@ -457,7 +504,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // 17. RENDER MESSAGES (XSS-SAFE)
+  // 18. RENDER MESSAGES (XSS-SAFE)
   function renderMessages() {
     const chatContainer = document.getElementById('chat-messages');
     chatContainer.innerHTML = '';
@@ -498,7 +545,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     chatContainer.scrollTop = chatContainer.scrollHeight;
   }
 
-  // 18. SEND MESSAGE
+  // 19. SEND MESSAGE
   const sendMessage = async () => {
     const input = document.getElementById('message-input');
     const content = input.value.trim();
