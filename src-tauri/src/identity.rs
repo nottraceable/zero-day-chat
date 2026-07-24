@@ -45,7 +45,7 @@ pub fn derive_identity_from_seed(display_name: String, seed_phrase: &str) -> Res
         .map_err(|_| "Failed to parse seed phrase.".to_string())?;
 
     let seed = mnemonic.to_seed("");
-    let seed_bytes = seed.as_bytes();
+    let seed_bytes = &seed;
     let secret_bytes: [u8; 32] = seed_bytes[0..32]
         .try_into()
         .map_err(|_| "Failed to derive secret key from seed.".to_string())?;
