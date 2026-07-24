@@ -1,50 +1,61 @@
-use libp2p::futures::StreamExt;
-use libp2p::{gossipsub, swarm::SwarmEvent, Multiaddr};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tokio::sync::mpsc;
+use tauri::{AppHandle, Emitter};
+use crate::storage::{AppData, Friend, Message, FriendRequest};
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "type")]
+pub enum NetworkPacket {
+    FriendRequestPacket { request: FriendRequest },
+    FriendAcceptPacket { friend: Friend, target_id: String },
+    ChatMessagePacket { message: Message },
+}
 
 pub struct NetworkService {
-    pub tx: mpsc::UnboundedSender<String>,
+    pub tx: mpsc::UnboundedSender<NetworkPacket>,
 }
 
 impl NetworkService {
-    pub fn start() -> Self {
-        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+    pub fn start(
+        app_handle: AppHandle,
+        app_state: Arc<std::sync::Mutex<AppData>>,
+        storage: crate::storage::StorageManager,
+    ) -> Self {
+        let (tx, mut rx) = mpsc::unbounded_channel::<NetworkPacket>();
 
-        // Use Tauri's async runtime to spawn the task safely
         tauri::async_runtime::spawn(async move {
-            let mut swarm = match libp2p::SwarmBuilder::with_new_identity()
-                .with_tokio()
-                .with_tcp(
-                    libp2p::tcp::Config::default(),
-                    libp2p::noise::Config::new,
-                    libp2p::yamux::Config::default,
-                )
-                .map_err(|e| e.to_string())
-            {
-                Ok(builder) => match builder.with_behaviour(|_| {
-                    let gossipsub_config = gossipsub::ConfigBuilder::default().build().unwrap();
-                    gossipsub::Behaviour::<gossipsub::IdentityTransform>::new(
-                        gossipsub::MessageAuthenticity::Anonymous,
-                        gossipsub_config,
-                    )
-                    .unwrap()
-                }) {
-                    Ok(b) => b.build(),
-                    Err(_) => return,
-                },
-                Err(_) => return,
-            };
+            // Processing loop for incoming / outgoing network traffic
+            while let Some(packet) = rx.recv().await {
+                let mut data = app_state.lock().unwrap();
+                let my_id = data.identity.as_ref().map(|i| i.user_id.clone()).unwrap_or_default();
 
-            let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap());
-
-            loop {
-                tokio::select! {
-                    Some(_msg) = rx.recv() => {
-                        // Broadcast message over Gossipsub mesh network
+                match packet {
+                    NetworkPacket::FriendRequestPacket { request } => {
+                        if request.target_id == my_id || request.target_id == "*" {
+                            if !data.pending_requests.iter().any(|r| r.id == request.id) {
+                                data.pending_requests.push(request);
+                                storage.save(&data).ok();
+                                let _ = app_handle.emit("app-data-updated", data.clone());
+                            }
+                        }
                     }
-                    event = swarm.select_next_some() => {
-                        if let SwarmEvent::NewListenAddr { address, .. } = event {
-                            println!("[P2P Mesh] Listening on: {}", address);
+                    NetworkPacket::FriendAcceptPacket { friend, target_id } => {
+                        if target_id == my_id {
+                            if !data.friends.iter().any(|f| f.user_id == friend.user_id) {
+                                data.friends.push(friend);
+                                storage.save(&data).ok();
+                                let _ = app_handle.emit("app-data-updated", data.clone());
+                            }
+                        }
+                    }
+                    NetworkPacket::ChatMessagePacket { message } => {
+                        if message.target_id == my_id || data.friends.iter().any(|f| f.user_id == message.sender_id) {
+                            if !data.messages.iter().any(|m| m.id == message.id) {
+                                data.messages.push(message);
+                                storage.save(&data).ok();
+                                let _ = app_handle.emit("app-data-updated", data.clone());
+                            }
                         }
                     }
                 }

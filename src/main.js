@@ -7,13 +7,24 @@ let activeChannelId = null;
 let activeGroup = null;
 
 window.addEventListener('DOMContentLoaded', async () => {
-  // 1. INITIALIZE & CHECK EXISTING SESSION
+  // 1. INITIALIZE & LISTEN FOR P2P NETWORK EVENTS
   try {
     if (invoke) {
       appState = await invoke('get_current_data');
       if (appState && appState.identity) {
         launchApp();
       }
+    }
+
+    if (listen) {
+      await listen('p2p_event', async () => {
+        if (invoke) {
+          appState = await invoke('get_current_data');
+          renderFriends();
+          renderPendingRequests();
+          renderMessages();
+        }
+      });
     }
   } catch (err) {
     console.error('Failed to load app state:', err);
@@ -89,10 +100,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('user-card-id').innerText = appState.identity.user_id.slice(0, 12) + '...';
 
     renderFriends();
+    renderPendingRequests();
     renderGroups();
   }
 
-  // 6. DIRECT MESSAGES VIEW SWITCHER
+  // 6. DIRECT MESSAGES VIEW SWITCHER & SUB-TABS
   document.getElementById('btn-dm-view').addEventListener('click', () => {
     activeGroup = null;
     activeTargetId = null;
@@ -107,6 +119,20 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('chat-title').innerText = 'Select a Direct Message';
 
     renderMessages();
+  });
+
+  document.getElementById('nav-friends-btn').addEventListener('click', () => {
+    document.getElementById('nav-friends-btn').classList.add('active');
+    document.getElementById('nav-pending-btn').classList.remove('active');
+    document.getElementById('friends-list').classList.remove('hidden');
+    document.getElementById('pending-list').classList.add('hidden');
+  });
+
+  document.getElementById('nav-pending-btn').addEventListener('click', () => {
+    document.getElementById('nav-pending-btn').classList.add('active');
+    document.getElementById('nav-friends-btn').classList.remove('active');
+    document.getElementById('pending-list').classList.remove('hidden');
+    document.getElementById('friends-list').classList.add('hidden');
   });
 
   // 7. MODAL TOGGLES
@@ -237,21 +263,18 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 11. ADD FRIEND
+  // 11. SEND P2P FRIEND REQUEST
   document.getElementById('submit-add-friend').addEventListener('click', async () => {
     const friendId = document.getElementById('input-friend-id').value.trim();
-    const displayName = document.getElementById('input-friend-name').value.trim();
-
     if (!friendId) return;
 
     try {
-      appState = await invoke('add_friend', { friendId, displayName: displayName || null });
-      renderFriends();
+      appState = await invoke('send_friend_request', { targetId: friendId });
+      alert('Friend request broadcasted across P2P mesh network.');
       toggleModal('modal-add-friend', false);
       document.getElementById('input-friend-id').value = '';
-      document.getElementById('input-friend-name').value = '';
     } catch (err) {
-      alert('Error adding friend: ' + err);
+      alert('Error sending friend request: ' + err);
     }
   });
 
@@ -305,7 +328,49 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 14. RENDER GROUPS
+  // 14. RENDER PENDING FRIEND REQUESTS
+  function renderPendingRequests() {
+    const pendingContainer = document.getElementById('pending-list');
+    const badge = document.getElementById('pending-badge');
+    pendingContainer.innerHTML = '';
+
+    const requests = appState.pending_requests || [];
+    if (requests.length > 0) {
+      badge.textContent = requests.length;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+
+    requests.forEach(req => {
+      const item = document.createElement('div');
+      item.className = 'list-item pending-item';
+      
+      const text = document.createElement('span');
+      text.textContent = `📩 ${req.sender_name}`;
+
+      const acceptBtn = document.createElement('button');
+      acceptBtn.className = 'small-btn success-btn';
+      acceptBtn.textContent = 'Accept';
+
+      acceptBtn.onclick = async (e) => {
+        e.stopPropagation();
+        try {
+          appState = await invoke('accept_friend_request', { requestId: req.id });
+          renderFriends();
+          renderPendingRequests();
+        } catch (err) {
+          alert('Error accepting friend request: ' + err);
+        }
+      };
+
+      item.appendChild(text);
+      item.appendChild(acceptBtn);
+      pendingContainer.appendChild(item);
+    });
+  }
+
+  // 15. RENDER GROUPS
   function renderGroups() {
     const groupListContainer = document.getElementById('group-list');
     groupListContainer.innerHTML = '';
@@ -347,7 +412,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 15. RENDER CHANNELS
+  // 16. RENDER CHANNELS
   function renderChannels(group) {
     const channelListContainer = document.getElementById('channel-list');
     channelListContainer.innerHTML = '';
@@ -392,7 +457,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // 16. RENDER MESSAGES (XSS-SAFE)
+  // 17. RENDER MESSAGES (XSS-SAFE)
   function renderMessages() {
     const chatContainer = document.getElementById('chat-messages');
     chatContainer.innerHTML = '';
@@ -433,7 +498,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     chatContainer.scrollTop = chatContainer.scrollHeight;
   }
 
-  // 17. SEND MESSAGE
+  // 18. SEND MESSAGE
   const sendMessage = async () => {
     const input = document.getElementById('message-input');
     const content = input.value.trim();

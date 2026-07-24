@@ -82,9 +82,11 @@
       <div id="dm-nav-section" class="sub-nav-section">
         <div class="top-tab-bar">
           <button id="nav-friends-btn" class="sub-tab-btn active">Friends</button>
-          <button id="nav-add-friend-btn" class="sub-tab-btn">+ Add Friend</button>
+          <button id="nav-pending-btn" class="sub-tab-btn">Pending <span id="pending-badge" class="badge hidden">0</span></button>
+          <button id="nav-add-friend-btn" class="sub-tab-btn">+ Request</button>
         </div>
         <div id="friends-list" class="items-list"></div>
+        <div id="pending-list" class="items-list hidden"></div>
       </div>
 
       <!-- GROUP CHANNELS SECTION -->
@@ -211,17 +213,15 @@
     </div>
   </div>
 
-  <!-- MODAL: ADD FRIEND -->
+  <!-- MODAL: ADD FRIEND / SEND P2P REQUEST -->
   <div id="modal-add-friend" class="modal-overlay hidden">
     <div class="modal-box">
-      <h3>Add Friend</h3>
-      <label for="input-friend-id">Friend User ID (zd1...)</label>
+      <h3>Send Friend Request</h3>
+      <label for="input-friend-id">Target User ID (zd1...)</label>
       <input type="text" id="input-friend-id" placeholder="zd1..." autocomplete="off" />
-      <label for="input-friend-name">Display Name (Optional)</label>
-      <input type="text" id="input-friend-name" placeholder="e.g. Alice" autocomplete="off" />
       <div class="modal-actions">
         <button id="close-add-friend" class="secondary-btn">Cancel</button>
-        <button id="submit-add-friend" class="primary-btn">Add Friend</button>
+        <button id="submit-add-friend" class="primary-btn">Send Request</button>
       </div>
     </div>
   </div>

@@ -5,15 +5,16 @@ mod storage;
 mod network;
 
 use identity::Identity;
-use storage::{AppData, Channel, Friend, Group, Message, StorageManager};
-use std::sync::Mutex;
-use tauri::State;
+use storage::{AppData, Channel, Friend, Group, Message, StorageManager, FriendRequest};
+use network::NetworkPacket;
+use std::sync::{Arc, Mutex};
+use tauri::{State, Manager};
 use tokio::sync::mpsc;
 
 struct AppState {
-    data: Mutex<AppData>,
+    data: Arc<Mutex<AppData>>,
     storage: StorageManager,
-    net_tx: mpsc::UnboundedSender<String>, // Saved here so commands can send P2P messages
+    net_tx: mpsc::UnboundedSender<NetworkPacket>,
 }
 
 #[tauri::command]
@@ -78,6 +79,63 @@ fn add_friend(friend_id: String, display_name: Option<String>, state: State<'_, 
     });
 
     state.storage.save(&data)?;
+    Ok(data.clone())
+}
+
+#[tauri::command]
+fn send_friend_request(target_id: String, state: State<'_, AppState>) -> Result<AppData, String> {
+    let data = state.data.lock().unwrap();
+    let identity = data.identity.as_ref().ok_or("No active session.")?.clone();
+    let clean_target = target_id.trim().to_string();
+
+    if clean_target.is_empty() {
+        return Err("Target User ID cannot be empty.".into());
+    }
+    if clean_target == identity.user_id {
+        return Err("You cannot add yourself.".into());
+    }
+
+    let req = FriendRequest {
+        id: format!("freq-{}", hex::encode(rand::random::<[u8; 6]>())),
+        sender_id: identity.user_id,
+        sender_name: identity.display_name,
+        target_id: clean_target,
+    };
+
+    let _ = state.net_tx.send(NetworkPacket::FriendRequestPacket { request: req });
+    Ok(data.clone())
+}
+
+#[tauri::command]
+fn accept_friend_request(request_id: String, state: State<'_, AppState>) -> Result<AppData, String> {
+    let mut data = state.data.lock().unwrap();
+    let identity = data.identity.as_ref().ok_or("No active session.")?.clone();
+
+    let req_pos = data.pending_requests.iter().position(|r| r.id == request_id)
+        .ok_or("Friend request not found.")?;
+    
+    let req = data.pending_requests.remove(req_pos);
+
+    let friend = Friend {
+        user_id: req.sender_id.clone(),
+        display_name: req.sender_name.clone(),
+    };
+
+    if !data.friends.iter().any(|f| f.user_id == friend.user_id) {
+        data.friends.push(friend.clone());
+    }
+
+    state.storage.save(&data)?;
+
+    // Send Acceptance packet back over P2P network
+    let _ = state.net_tx.send(NetworkPacket::FriendAcceptPacket {
+        friend: Friend {
+            user_id: identity.user_id,
+            display_name: identity.display_name,
+        },
+        target_id: req.sender_id,
+    });
+
     Ok(data.clone())
 }
 
@@ -200,31 +258,38 @@ fn send_message(target_id: String, channel_id: Option<String>, content: String, 
         id: format!("msg-{}", hex::encode(rand::random::<[u8; 6]>())),
         sender_id: identity.user_id.clone(),
         sender_name: identity.display_name.clone(),
-        target_id,
+        target_id: target_id.clone(),
         channel_id,
-        content: content.clone(),
+        content,
         timestamp,
     };
 
-    data.messages.push(msg);
+    data.messages.push(msg.clone());
     state.storage.save(&data)?;
 
-    // Broadcast over P2P mesh network
-    let _ = state.net_tx.send(content);
-
+    let _ = state.net_tx.send(NetworkPacket::ChatMessagePacket { message: msg });
     Ok(data.clone())
 }
 
 fn main() {
     let storage = StorageManager::new();
-    let initial_data = storage.load();
-    let net_service = network::NetworkService::start();
+    let initial_data = Arc::new(Mutex::new(storage.load()));
 
     tauri::Builder::default()
-        .manage(AppState {
-            data: Mutex::new(initial_data),
-            storage,
-            net_tx: net_service.tx,
+        .setup(move |app| {
+            let net_service = network::NetworkService::start(
+                app.handle().clone(),
+                initial_data.clone(),
+                StorageManager::new(),
+            );
+
+            app.manage(AppState {
+                data: initial_data,
+                storage,
+                net_tx: net_service.tx,
+            });
+
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_current_data,
@@ -232,6 +297,8 @@ fn main() {
             recover_account,
             logout,
             add_friend,
+            send_friend_request,
+            accept_friend_request,
             create_group,
             join_group,
             leave_group,
