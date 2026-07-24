@@ -1,4 +1,6 @@
-const { invoke } = window.__TAURI__.tauri;
+// Safe Tauri IPC / Event API binding with fallbacks
+const invoke = window.__TAURI__?.tauri?.invoke || window.__TAURI__?.invoke || window.__TAURI__?.core?.invoke;
+const listen = window.__TAURI__?.event?.listen || window.__TAURI__?.listen;
 
 let appState = null;
 let activeTargetId = null;
@@ -8,15 +10,41 @@ let activeGroup = null;
 window.addEventListener('DOMContentLoaded', async () => {
   // 1. INITIALIZE & CHECK EXISTING LOCAL STATE
   try {
-    appState = await invoke('get_current_data');
-    if (appState && appState.identity) {
-      launchApp();
+    if (invoke) {
+      appState = await invoke('get_current_data');
+      if (appState && appState.identity) {
+        launchApp();
+      }
     }
   } catch (err) {
     console.error('Failed to load app data:', err);
   }
 
-  // 2. AUTH TAB SWITCHING
+  // 2. REAL-TIME TAURI EVENT LISTENERS (Incoming P2P Messages & State Updates)
+  if (listen) {
+    listen('p2p-message-received', (event) => {
+      if (event.payload) {
+        if (!appState.messages) appState.messages = [];
+        appState.messages.push(event.payload);
+        renderMessages();
+      }
+    });
+
+    listen('state-updated', (event) => {
+      if (event.payload) {
+        appState = event.payload;
+        if (activeGroup) {
+          activeGroup = appState.groups?.find(g => g.id === activeGroup.id) || null;
+        }
+        renderFriends();
+        renderGroups();
+        if (activeGroup) renderChannels(activeGroup);
+        renderMessages();
+      }
+    });
+  }
+
+  // 3. AUTH TAB SWITCHING
   const tabCreateBtn = document.getElementById('tab-create-btn');
   const tabRecoverBtn = document.getElementById('tab-recover-btn');
   const createForm = document.getElementById('create-account-form');
@@ -36,7 +64,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     createForm.classList.add('hidden');
   });
 
-  // 3. GENERATE ACCOUNT & SEED
+  // 4. GENERATE ACCOUNT & SEED
   document.getElementById('gen-seed-btn').addEventListener('click', async () => {
     const displayName = document.getElementById('create-display-name').value.trim();
     if (!displayName) return alert('Please choose a Display Name.');
@@ -62,7 +90,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     launchApp();
   });
 
-  // 4. RECOVER ACCOUNT
+  // 5. RECOVER ACCOUNT
   document.getElementById('finish-recover-btn').addEventListener('click', async () => {
     const displayName = document.getElementById('recover-display-name').value.trim();
     const userId = document.getElementById('recover-user-id').value.trim();
@@ -78,7 +106,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 5. LAUNCH MAIN SHELL
+  // 6. LAUNCH MAIN SHELL
   function launchApp() {
     document.getElementById('auth-modal').classList.add('hidden');
     document.getElementById('app-shell').classList.remove('hidden');
@@ -90,7 +118,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     renderGroups();
   }
 
-  // 6. DIRECT MESSAGES VIEW SWITCHER
+  // 7. DIRECT MESSAGES VIEW SWITCHER
   document.getElementById('btn-dm-view').addEventListener('click', () => {
     activeGroup = null;
     activeTargetId = null;
@@ -107,7 +135,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     renderMessages();
   });
 
-  // 7. MODALS
+  // 8. MODALS
   const toggleModal = (modalId, show) => {
     document.getElementById(modalId).classList.toggle('hidden', !show);
   };
@@ -124,7 +152,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-open-channel-modal').addEventListener('click', () => toggleModal('modal-create-channel', true));
   document.getElementById('close-create-channel').addEventListener('click', () => toggleModal('modal-create-channel', false));
 
-  // 8. CREATE GROUPCHAT
+  // 9. CREATE GROUPCHAT
   document.getElementById('submit-create-group').addEventListener('click', async () => {
     const name = document.getElementById('input-group-name').value.trim();
     if (!name) return;
@@ -139,7 +167,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 9. JOIN GROUPCHAT
+  // 10. JOIN GROUPCHAT
   document.getElementById('submit-join-group').addEventListener('click', async () => {
     const groupId = document.getElementById('input-join-group-id').value.trim();
     if (!groupId) return;
@@ -154,7 +182,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 10. CREATE CHANNEL (OWNER PERMISSION VERIFICATION)
+  // 11. CREATE CHANNEL
   document.getElementById('submit-create-channel').addEventListener('click', async () => {
     const channelName = document.getElementById('input-channel-name').value.trim();
     const category = document.getElementById('input-channel-category').value.trim();
@@ -178,7 +206,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 11. ADD FRIEND
+  // 12. ADD FRIEND
   document.getElementById('submit-add-friend').addEventListener('click', async () => {
     const friendId = document.getElementById('input-friend-id').value.trim();
     const displayName = document.getElementById('input-friend-name').value.trim();
@@ -196,7 +224,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 12. RENDER FRIENDS
+  // 13. RENDER FRIENDS
   function renderFriends() {
     const friendsContainer = document.getElementById('friends-list');
     friendsContainer.innerHTML = '';
@@ -205,7 +233,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       const item = document.createElement('div');
       item.className = 'list-item';
       if (activeTargetId === friend.user_id) item.classList.add('active');
-      item.innerText = `💬 ${friend.display_name}`;
+      item.textContent = `💬 ${friend.display_name}`;
 
       item.onclick = () => {
         activeTargetId = friend.user_id;
@@ -222,7 +250,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 13. RENDER GROUPS
+  // 14. RENDER GROUPS
   function renderGroups() {
     const groupListContainer = document.getElementById('group-list');
     groupListContainer.innerHTML = '';
@@ -232,12 +260,13 @@ window.addEventListener('DOMContentLoaded', async () => {
       icon.className = 'server-icon';
       if (activeGroup && activeGroup.id === group.id) icon.classList.add('active-server');
 
-      icon.innerText = group.name.substring(0, 2).toUpperCase();
+      icon.textContent = group.name.substring(0, 2).toUpperCase();
       icon.title = group.name;
 
       icon.onclick = () => {
         activeGroup = group;
         activeTargetId = group.id;
+        activeChannelId = null; // FIX: Reset selected channel on group switch
 
         document.getElementById('btn-dm-view').classList.remove('active-server');
         document.querySelectorAll('.group-list .server-icon').forEach(el => el.classList.remove('active-server'));
@@ -263,13 +292,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 14. RENDER CHANNELS IN CATEGORIES
+  // 15. RENDER CHANNELS IN CATEGORIES
   function renderChannels(group) {
     const channelListContainer = document.getElementById('channel-list');
     channelListContainer.innerHTML = '';
 
     const categories = {};
-    group.channels.forEach(ch => {
+    (group.channels || []).forEach(ch => {
       const catKey = ch.category || 'TEXT CHANNELS';
       if (!categories[catKey]) categories[catKey] = [];
       categories[catKey].push(ch);
@@ -278,7 +307,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     for (const [catName, channels] of Object.entries(categories)) {
       const catHeader = document.createElement('div');
       catHeader.className = 'category-header';
-      catHeader.innerText = catName;
+      catHeader.textContent = catName;
       channelListContainer.appendChild(catHeader);
 
       channels.forEach(ch => {
@@ -286,7 +315,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         item.className = 'list-item';
         if (activeChannelId === ch.id) item.classList.add('active');
 
-        item.innerText = `# ${ch.name}`;
+        item.textContent = `# ${ch.name}`;
 
         item.onclick = () => {
           activeChannelId = ch.id;
@@ -301,17 +330,22 @@ window.addEventListener('DOMContentLoaded', async () => {
       });
     }
 
-    if (group.channels.length > 0 && !activeChannelId) {
+    if (group.channels && group.channels.length > 0 && !activeChannelId) {
       activeChannelId = group.channels[0].id;
       document.getElementById('chat-title').innerText = `# ${group.channels[0].name}`;
       renderMessages();
     }
   }
 
-  // 15. RENDER MESSAGES
+  // 16. RENDER MESSAGES (XSS-Safe DOM Construction)
   function renderMessages() {
     const chatContainer = document.getElementById('chat-messages');
-    chatContainer.innerHTML = '<div class="system-message">Welcome to Zero-Day Chat. All messages are encrypted peer-to-peer.</div>';
+    chatContainer.innerHTML = '';
+
+    const sysMsg = document.createElement('div');
+    sysMsg.className = 'system-message';
+    sysMsg.textContent = 'Welcome to Zero-Day Chat. All messages are encrypted peer-to-peer.';
+    chatContainer.appendChild(sysMsg);
 
     if (!activeTargetId) return;
 
@@ -324,20 +358,27 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
     filtered.forEach(msg => {
-      const isMine = msg.sender_id === appState.identity.user_id;
+      const isMine = msg.sender_id === appState?.identity?.user_id;
       const card = document.createElement('div');
       card.className = `message-card ${isMine ? 'mine' : ''}`;
-      card.innerHTML = `
-        <div class="message-sender">${msg.sender_name}</div>
-        <div class="message-content">${msg.content}</div>
-      `;
+
+      const senderDiv = document.createElement('div');
+      senderDiv.className = 'message-sender';
+      senderDiv.textContent = msg.sender_name || 'Unknown';
+
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'message-content';
+      contentDiv.textContent = msg.content || '';
+
+      card.appendChild(senderDiv);
+      card.appendChild(contentDiv);
       chatContainer.appendChild(card);
     });
 
     chatContainer.scrollTop = chatContainer.scrollHeight;
   }
 
-  // 16. SEND MESSAGE
+  // 17. SEND MESSAGE
   const sendMessage = async () => {
     const input = document.getElementById('message-input');
     const content = input.value.trim();

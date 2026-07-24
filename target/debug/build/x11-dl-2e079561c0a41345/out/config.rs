@@ -14,6 +14,6 @@ pub const xtst: Option<&'static str> = Some("/usr/lib/x86_64-linux-gnu");
 pub const xrender: Option<&'static str> = Some("/usr/lib/x86_64-linux-gnu");
 pub const xpresent: Option<&'static str> = None;
 pub const xscrnsaver: Option<&'static str> = None;
-pub const xt: Option<&'static str> = Some("/usr/lib/x86_64-linux-gnu");
+pub const xt: Option<&'static str> = None;
 }
 }
