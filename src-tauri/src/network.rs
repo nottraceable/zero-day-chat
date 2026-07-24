@@ -1,11 +1,10 @@
-use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures::StreamExt;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p::{
-    gossipsub, identity, mdns, noise, tcp, yamux, Multiaddr, PeerId, SwarmBuilder,
+    dcutr, gossipsub, identify, mdns, noise, relay, tcp, yamux, Multiaddr, PeerId, SwarmBuilder,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
@@ -13,12 +12,13 @@ use tokio::sync::mpsc;
 
 use crate::storage::{AppData, Friend, FriendRequest, Message, StorageManager};
 
-// Public global bootstrap nodes to bridge NATs and internet peers
+// Public global bootstrap nodes with both DNS hostnames and raw IPv4 fallbacks
 const DEFAULT_BOOTSTRAP_NODES: &[&str] = &[
     "/dns4/bootstrap.libp2p.io/tcp/4001/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
     "/dns4/bootstrap.libp2p.io/tcp/4001/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
     "/dns4/bootstrap.libp2p.io/tcp/4001/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
     "/dns4/bootstrap.libp2p.io/tcp/4001/p2p/QmcZf1Y3323GEvhbdUZee3VxnEEdSiRShsJeNoUXk85wbC",
+    "/ip4/104.131.131.209/tcp/4001/p2p/QmaCpDM1trAbRtB2LPGChZsZbxks1N55KWBGANUYW3B6tx",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +38,9 @@ pub enum NetworkCommand {
 pub struct AppBehaviour {
     pub gossipsub: gossipsub::Behaviour,
     pub mdns: mdns::tokio::Behaviour,
+    pub identify: identify::Behaviour,
+    pub relay_client: relay::client::Behaviour,
+    pub dcutr: dcutr::Behaviour,
 }
 
 pub struct NetworkService {
@@ -53,53 +56,78 @@ impl NetworkService {
         let (tx, mut rx) = mpsc::unbounded_channel::<NetworkCommand>();
 
         tauri::async_runtime::spawn(async move {
-            let local_key = identity::Keypair::generate_ed25519();
+            let local_key = libp2p::identity::Keypair::generate_ed25519();
             let local_peer_id = PeerId::from(local_key.public());
 
-            // Gossipsub setup with signed message authenticity for security
+            // 1. Gossipsub setup
             let gossipsub_config = gossipsub::ConfigBuilder::default()
                 .max_transmit_size(1048576) // 1MB payload capacity
                 .heartbeat_interval(Duration::from_millis(750))
                 .build()
                 .expect("Valid gossipsub config");
 
-            let mut gossipsub = gossipsub::Behaviour::new(
+            let gossipsub_behaviour = gossipsub::Behaviour::new(
                 gossipsub::MessageAuthenticity::Signed(local_key.clone()),
                 gossipsub_config,
             )
             .expect("Valid gossipsub behaviour");
 
             let topic = gossipsub::IdentTopic::new("zero-day-chat-global-v1");
-            let _ = gossipsub.subscribe(&topic);
 
-            // Local mDNS setup for auto-discovering LAN peers
-            let mdns = mdns::tokio::Behaviour::new(
+            // 2. Local mDNS setup (for LAN discovery)
+            let mdns_behaviour = mdns::tokio::Behaviour::new(
                 mdns::Config::default(),
                 local_peer_id,
             )
             .expect("Valid mDNS behaviour");
 
-            let behaviour = AppBehaviour { gossipsub, mdns };
+            // 3. Identify protocol (crucial for exchanging external NAT multiaddrs)
+            let identify_behaviour = identify::Behaviour::new(
+                identify::Config::new(
+                    "/zero-day-chat/1.0.0".to_string(),
+                    local_key.public(),
+                ),
+            );
 
-            let mut swarm = SwarmBuilder::with_existing_identity(local_key)
+            // 4. DCUtR behavior for hole-punching direct connections across NATs
+            let dcutr_behaviour = dcutr::Behaviour::new(local_peer_id);
+
+            // 5. Build Swarm with DNS, TCP, and Relay Client support
+            let mut swarm = SwarmBuilder::with_existing_identity(local_key.clone())
                 .with_tokio()
                 .with_tcp(
                     tcp::Config::default(),
-                    noise::Config::new, // Transport Layer Encryption
+                    noise::Config::new,
                     yamux::Config::default,
                 )
                 .expect("TCP transport build failed")
-                .with_behaviour(|_| -> Result<AppBehaviour, Box<dyn Error + Send + Sync>> {
-                    Ok(behaviour)
+                .with_dns()
+                .expect("DNS resolver failed")
+                .with_relay_client(
+                    noise::Config::new,
+                    yamux::Config::default,
+                )
+                .expect("Relay client configuration failed")
+                .with_behaviour(|_key, relay_client| {
+                    let mut gs = gossipsub_behaviour;
+                    let _ = gs.subscribe(&topic);
+
+                    Ok(AppBehaviour {
+                        gossipsub: gs,
+                        mdns: mdns_behaviour,
+                        identify: identify_behaviour,
+                        relay_client,
+                        dcutr: dcutr_behaviour,
+                    })
                 })
                 .expect("Behaviour init failed")
                 .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
                 .build();
 
-            // Listen on all local IPv4 interfaces
+            // Listen locally
             let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
 
-            // Dial Internet Bootstrap Nodes to connect to the global WAN mesh
+            // Dial bootstrap nodes
             let custom_nodes = {
                 let lock = state.lock().unwrap();
                 lock.bootstrap_nodes.clone()
@@ -111,13 +139,11 @@ impl NetworkService {
                 }
             }
 
-            // Periodic connection keep-alive timer to ensure continuous connection
             let mut tick = tokio::time::interval(Duration::from_secs(30));
 
             loop {
                 tokio::select! {
                     _ = tick.tick() => {
-                        // Re-dial bootstrap nodes if mesh peer connection count drops
                         if swarm.behaviour().gossipsub.all_peers().count() < 2 {
                             for node_addr in DEFAULT_BOOTSTRAP_NODES {
                                 if let Ok(addr) = node_addr.parse::<Multiaddr>() {
@@ -153,6 +179,17 @@ impl NetworkService {
                             SwarmEvent::Behaviour(AppBehaviourEvent::Gossipsub(gossipsub::Event::Message { message, .. })) => {
                                 if let Ok(packet) = serde_json::from_slice::<NetworkPacket>(&message.data) {
                                     process_packet(&packet, &state, &storage, &app_handle);
+                                }
+                            }
+                            SwarmEvent::Behaviour(AppBehaviourEvent::Identify(identify::Event::Received { peer_id, info })) => {
+                                for addr in info.listen_addrs {
+                                    swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+
+                                    // Listen on public relay nodes when identified
+                                    if addr.to_string().contains("p2p-circuit") || info.protocols.iter().any(|p| p.as_ref().contains("circuit")) {
+                                        let relay_listen_addr = addr.clone().with(libp2p::multiaddr::Protocol::P2pCircuit);
+                                        let _ = swarm.listen_on(relay_listen_addr);
+                                    }
                                 }
                             }
                             _ => {}
@@ -205,16 +242,12 @@ fn process_packet(
                         }
                     }
                 }
-                NetworkPacket::SyncStatePacket { data: new_data } => {
-                    *data = new_data.clone();
-                    updated = true;
-                }
+                NetworkPacket::SyncStatePacket { .. } => {}
             }
 
             if updated {
                 let _ = storage.save(&data);
-                let _ = app_handle.emit_all("p2p_event", packet);
-                let _ = app_handle.emit_all("app-data-updated", data.clone());
+                let _ = app_handle.emit_all("state-updated", data.clone());
             }
         }
     }

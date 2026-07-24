@@ -285,7 +285,7 @@ fn send_message(target_id: String, channel_id: Option<String>, content: String, 
 fn add_bootstrap_node(node_multiaddr: String, state: State<'_, AppState>) -> Result<AppData, String> {
     let mut data = state.data.lock().unwrap();
     let clean_addr = node_multiaddr.trim().to_string();
-    
+
     if clean_addr.is_empty() {
         return Err("Bootstrap Multiaddress cannot be empty.".into());
     }

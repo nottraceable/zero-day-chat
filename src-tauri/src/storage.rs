@@ -58,6 +58,9 @@ pub struct AppData {
     pub pending_requests: Vec<FriendRequest>,
     pub groups: Vec<Group>,
     pub messages: Vec<Message>,
+    
+    // Safety attribute: prevents deserialization errors on existing save files lacking this field
+    #[serde(default)]
     pub bootstrap_nodes: Vec<String>,
 }
 
