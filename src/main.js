@@ -5,10 +5,9 @@ let appState = null;
 let activeTargetId = null;
 let activeChannelId = null;
 let activeGroup = null;
-let myListenMultiaddr = "";
 
 window.addEventListener('DOMContentLoaded', async () => {
-  // 1. INITIALIZE & LISTEN FOR P2P NETWORK EVENTS
+  // 1. INITIALIZE & LISTEN FOR GLOBAL MESH NETWORK EVENTS
   try {
     if (invoke) {
       appState = await invoke('get_current_data');
@@ -18,14 +17,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (listen) {
-      // Receive local multiaddress string from Rust swarm
-      await listen('p2p_listen_addr', (event) => {
-        myListenMultiaddr = event.payload;
-        const p2pInput = document.getElementById('settings-p2p-addr');
-        if (p2pInput) p2pInput.value = myListenMultiaddr;
-      });
-
-      // P2P network packet event
+      // Direct network packet event from mesh
       await listen('p2p_event', async () => {
         if (invoke) {
           appState = await invoke('get_current_data');
@@ -166,9 +158,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-join-group').addEventListener('click', () => toggleModal('modal-join-group', true));
   document.getElementById('close-join-group').addEventListener('click', () => toggleModal('modal-join-group', false));
 
-  document.getElementById('btn-connect-peer-modal').addEventListener('click', () => toggleModal('modal-connect-peer', true));
-  document.getElementById('close-connect-peer').addEventListener('click', () => toggleModal('modal-connect-peer', false));
-
   document.getElementById('nav-add-friend-btn').addEventListener('click', () => toggleModal('modal-add-friend', true));
   document.getElementById('close-add-friend').addEventListener('click', () => toggleModal('modal-add-friend', false));
 
@@ -181,7 +170,6 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     document.getElementById('settings-display-name').textContent = appState.identity.display_name;
     document.getElementById('settings-user-id').value = appState.identity.user_id;
-    document.getElementById('settings-p2p-addr').value = myListenMultiaddr || 'Discovering listen address...';
     document.getElementById('settings-seed-phrase').value = appState.identity.seed_phrase;
 
     const groupMgmt = document.getElementById('group-management-actions');
@@ -203,14 +191,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-copy-settings-id').addEventListener('click', () => {
     navigator.clipboard.writeText(document.getElementById('settings-user-id').value);
     alert('User ID copied to clipboard!');
-  });
-
-  document.getElementById('btn-copy-p2p-addr').addEventListener('click', () => {
-    const val = document.getElementById('settings-p2p-addr').value;
-    if (val) {
-      navigator.clipboard.writeText(val);
-      alert('P2P Multiaddress copied!');
-    }
   });
 
   document.getElementById('btn-toggle-seed-vis').addEventListener('click', (e) => {
@@ -265,22 +245,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 9. DIAL WAN / P2P PEER MULTIADDRESS
-  document.getElementById('submit-connect-peer').addEventListener('click', async () => {
-    const multiaddr = document.getElementById('input-connect-multiaddr').value.trim();
-    if (!multiaddr) return;
-
-    try {
-      const res = await invoke('connect_peer', { multiaddr });
-      alert(res);
-      toggleModal('modal-connect-peer', false);
-      document.getElementById('input-connect-multiaddr').value = '';
-    } catch (err) {
-      alert('Failed to dial peer: ' + err);
-    }
-  });
-
-  // 10. CREATE GROUPCHAT
+  // 9. CREATE GROUPCHAT
   document.getElementById('submit-create-group').addEventListener('click', async () => {
     const name = document.getElementById('input-group-name').value.trim();
     if (!name) return;
@@ -295,7 +260,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 11. JOIN GROUPCHAT
+  // 10. JOIN GROUPCHAT
   document.getElementById('submit-join-group').addEventListener('click', async () => {
     const groupId = document.getElementById('input-join-group-id').value.trim();
     if (!groupId) return;
@@ -310,14 +275,14 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 12. SEND P2P FRIEND REQUEST
+  // 11. SEND FRIEND REQUEST (GLOBAL MESH ROUTED BY USER ID)
   document.getElementById('submit-add-friend').addEventListener('click', async () => {
     const friendId = document.getElementById('input-friend-id').value.trim();
     if (!friendId) return;
 
     try {
       appState = await invoke('send_friend_request', { targetId: friendId });
-      alert('Friend request broadcasted across P2P mesh network.');
+      alert('Friend request broadcasted across global mesh network.');
       toggleModal('modal-add-friend', false);
       document.getElementById('input-friend-id').value = '';
     } catch (err) {
@@ -325,7 +290,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 13. CREATE CHANNEL
+  // 12. CREATE CHANNEL
   document.getElementById('submit-create-channel').addEventListener('click', async () => {
     const channelName = document.getElementById('input-channel-name').value.trim();
     const category = document.getElementById('input-channel-category').value.trim();
@@ -349,7 +314,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 14. RENDER FRIENDS
+  // 13. RENDER FRIENDS
   function renderFriends() {
     const friendsContainer = document.getElementById('friends-list');
     friendsContainer.innerHTML = '';
@@ -375,7 +340,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 15. RENDER PENDING FRIEND REQUESTS
+  // 14. RENDER PENDING FRIEND REQUESTS
   function renderPendingRequests() {
     const pendingContainer = document.getElementById('pending-list');
     const badge = document.getElementById('pending-badge');
@@ -417,7 +382,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 16. RENDER GROUPS
+  // 15. RENDER GROUPS
   function renderGroups() {
     const groupListContainer = document.getElementById('group-list');
     groupListContainer.innerHTML = '';
@@ -459,7 +424,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 17. RENDER CHANNELS
+  // 16. RENDER CHANNELS
   function renderChannels(group) {
     const channelListContainer = document.getElementById('channel-list');
     channelListContainer.innerHTML = '';
@@ -504,14 +469,14 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // 18. RENDER MESSAGES (XSS-SAFE)
+  // 17. RENDER MESSAGES (XSS-SAFE)
   function renderMessages() {
     const chatContainer = document.getElementById('chat-messages');
     chatContainer.innerHTML = '';
 
     const sysMsg = document.createElement('div');
     sysMsg.className = 'system-message';
-    sysMsg.textContent = 'Welcome to Zero-Day Chat. All messages are encrypted peer-to-peer.';
+    sysMsg.textContent = 'Welcome to Zero-Day Chat. Messages route peer-to-peer globally.';
     chatContainer.appendChild(sysMsg);
 
     if (!activeTargetId) return;
@@ -545,7 +510,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     chatContainer.scrollTop = chatContainer.scrollHeight;
   }
 
-  // 19. SEND MESSAGE
+  // 18. SEND MESSAGE
   const sendMessage = async () => {
     const input = document.getElementById('message-input');
     const content = input.value.trim();

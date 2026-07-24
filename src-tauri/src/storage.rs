@@ -58,6 +58,7 @@ pub struct AppData {
     pub pending_requests: Vec<FriendRequest>,
     pub groups: Vec<Group>,
     pub messages: Vec<Message>,
+    pub bootstrap_nodes: Vec<String>,
 }
 
 pub struct StorageManager {

@@ -15,7 +15,7 @@
         <img src="../src-tauri/logos/zero-day.png" alt="ZERO-DAY Logo" class="brand-logo" onerror="this.style.display='none'" />
         <h2>ZERO-DAY</h2>
       </div>
-      <p class="subtitle">Decentralized P2P Secure Messenger</p>
+      <p class="subtitle">Decentralized Global Mesh Messenger</p>
 
       <div class="tab-buttons">
         <button id="tab-create-btn" class="tab-btn active">Create Account</button>
@@ -70,7 +70,6 @@
       <div id="group-list" class="group-list"></div>
       <button id="btn-add-group" class="server-icon action-icon" title="Create Groupchat">+</button>
       <button id="btn-join-group" class="server-icon action-icon" title="Join Groupchat">🔗</button>
-      <button id="btn-connect-peer-modal" class="server-icon action-icon" title="Dial WAN/IP Peer">🌐</button>
     </div>
 
     <!-- SUB-SIDEBAR (DM / CHANNELS LIST) -->
@@ -117,15 +116,15 @@
     <div class="chat-viewport">
       <div class="chat-header">
         <h4 id="chat-title">Select a Direct Message or Channel</h4>
-        <span class="p2p-badge">🔒 P2P E2EE Mesh</span>
+        <span class="p2p-badge">🌐 Global Encrypted Mesh</span>
       </div>
 
       <div id="chat-messages" class="chat-messages">
-        <div class="system-message">Welcome to Zero-Day Chat. All messages are encrypted peer-to-peer.</div>
+        <div class="system-message">Welcome to Zero-Day Chat. Messages route peer-to-peer globally.</div>
       </div>
 
       <div class="chat-input-area">
-        <input type="text" id="message-input" placeholder="Type a secure P2P message..." autocomplete="off" />
+        <input type="text" id="message-input" placeholder="Type a secure mesh message..." autocomplete="off" />
         <button id="btn-send-message" class="primary-btn">Send</button>
       </div>
     </div>
@@ -143,16 +142,10 @@
         <label>Display Name</label>
         <p id="settings-display-name" class="settings-value">-</p>
 
-        <label>User ID (Public Key)</label>
+        <label>Your User ID (Share anywhere to connect)</label>
         <div class="input-copy-group">
           <input type="text" id="settings-user-id" readonly />
           <button id="btn-copy-settings-id" class="small-btn">Copy</button>
-        </div>
-
-        <label>P2P Multiaddress (Share for WAN Connection)</label>
-        <div class="input-copy-group">
-          <input type="text" id="settings-p2p-addr" readonly placeholder="Waiting for listen address..." />
-          <button id="btn-copy-p2p-addr" class="small-btn">Copy</button>
         </div>
 
         <label>BIP-39 Seed Phrase</label>
@@ -175,20 +168,6 @@
       <div class="modal-actions">
         <button id="btn-logout" class="danger-btn">Logout Identity</button>
         <button id="close-settings" class="secondary-btn">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: CONNECT PEER DIRECTLY (WAN/MULTIADDRESS) -->
-  <div id="modal-connect-peer" class="modal-overlay hidden">
-    <div class="modal-box">
-      <h3>Dial P2P Peer Address</h3>
-      <p style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 12px;">Enter remote peer's multiaddress (e.g. <code>/ip4/x.x.x.x/tcp/4001/p2p/...</code>):</p>
-      <label for="input-connect-multiaddr">Multiaddress</label>
-      <input type="text" id="input-connect-multiaddr" placeholder="/ip4/1.2.3.4/tcp/..." autocomplete="off" />
-      <div class="modal-actions">
-        <button id="close-connect-peer" class="secondary-btn">Cancel</button>
-        <button id="submit-connect-peer" class="primary-btn">Connect Peer</button>
       </div>
     </div>
   </div>
@@ -239,7 +218,7 @@
     <div class="modal-box">
       <h3>Send Friend Request</h3>
       <label for="input-friend-id">Target User ID (zd1...)</label>
-      <input type="text" id="input-friend-id" placeholder="zd1..." autocomplete="off" />
+      <input type="text" id="input-friend-id" placeholder="Paste User ID here..." autocomplete="off" />
       <div class="modal-actions">
         <button id="close-add-friend" class="secondary-btn">Cancel</button>
         <button id="submit-add-friend" class="primary-btn">Send Request</button>

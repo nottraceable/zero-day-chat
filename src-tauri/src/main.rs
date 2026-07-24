@@ -35,17 +35,6 @@ fn get_current_data(state: State<'_, AppState>) -> Result<AppData, String> {
 }
 
 #[tauri::command]
-fn connect_peer(multiaddr: String, state: State<'_, AppState>) -> Result<String, String> {
-    let clean = multiaddr.trim().to_string();
-    if clean.is_empty() {
-        return Err("Multiaddress cannot be empty.".into());
-    }
-    state.net_tx.send(NetworkCommand::ConnectPeer(clean.clone()))
-        .map_err(|e| e.to_string())?;
-    Ok(format!("Dialing peer {}", clean))
-}
-
-#[tauri::command]
 fn create_account(display_name: String, state: State<'_, AppState>) -> Result<AppData, String> {
     let mut data = state.data.lock().unwrap();
     let identity = Identity::generate(display_name)?;
@@ -292,6 +281,23 @@ fn send_message(target_id: String, channel_id: Option<String>, content: String, 
     Ok(data.clone())
 }
 
+#[tauri::command]
+fn add_bootstrap_node(node_multiaddr: String, state: State<'_, AppState>) -> Result<AppData, String> {
+    let mut data = state.data.lock().unwrap();
+    let clean_addr = node_multiaddr.trim().to_string();
+    
+    if clean_addr.is_empty() {
+        return Err("Bootstrap Multiaddress cannot be empty.".into());
+    }
+
+    if !data.bootstrap_nodes.contains(&clean_addr) {
+        data.bootstrap_nodes.push(clean_addr);
+        state.storage.save(&data)?;
+    }
+
+    Ok(data.clone())
+}
+
 fn main() {
     let storage = StorageManager::new();
     let initial_data = Arc::new(Mutex::new(storage.load()));
@@ -326,7 +332,7 @@ fn main() {
             delete_group,
             create_channel,
             send_message,
-            connect_peer
+            add_bootstrap_node
         ])
         .run(tauri::generate_context!())
         .expect("error while running zero-day-chat application");
