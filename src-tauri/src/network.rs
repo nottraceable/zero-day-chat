@@ -10,7 +10,8 @@ impl NetworkService {
     pub fn start() -> Self {
         let (tx, mut rx) = mpsc::unbounded_channel::<String>();
 
-        tokio::spawn(async move {
+        // Use Tauri's async runtime to spawn the task safely
+        tauri::async_runtime::spawn(async move {
             let mut swarm = match libp2p::SwarmBuilder::with_new_identity()
                 .with_tokio()
                 .with_tcp(

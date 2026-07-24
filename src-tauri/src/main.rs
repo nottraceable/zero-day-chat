@@ -8,10 +8,12 @@ use identity::Identity;
 use storage::{AppData, Channel, Friend, Group, Message, StorageManager};
 use std::sync::Mutex;
 use tauri::State;
+use tokio::sync::mpsc;
 
 struct AppState {
     data: Mutex<AppData>,
     storage: StorageManager,
+    net_tx: mpsc::UnboundedSender<String>, // Saved here so commands can send P2P messages
 }
 
 #[tauri::command]
@@ -49,7 +51,7 @@ fn logout(state: State<'_, AppState>) -> Result<AppData, String> {
 #[tauri::command]
 fn add_friend(friend_id: String, display_name: Option<String>, state: State<'_, AppState>) -> Result<AppData, String> {
     let mut data = state.data.lock().unwrap();
-    
+
     let clean_id = friend_id.trim().to_string();
     if clean_id.is_empty() {
         return Err("Friend User ID cannot be empty.".into());
@@ -63,7 +65,7 @@ fn add_friend(friend_id: String, display_name: Option<String>, state: State<'_, 
         .unwrap_or_default()
         .trim()
         .to_string();
-    
+
     let final_name = if name.is_empty() {
         format!("Peer-{}", &clean_id[..clean_id.len().min(8)])
     } else {
@@ -200,24 +202,29 @@ fn send_message(target_id: String, channel_id: Option<String>, content: String, 
         sender_name: identity.display_name.clone(),
         target_id,
         channel_id,
-        content,
+        content: content.clone(),
         timestamp,
     };
 
     data.messages.push(msg);
     state.storage.save(&data)?;
+
+    // Broadcast over P2P mesh network
+    let _ = state.net_tx.send(content);
+
     Ok(data.clone())
 }
 
 fn main() {
     let storage = StorageManager::new();
     let initial_data = storage.load();
-    network::NetworkService::start();
+    let net_service = network::NetworkService::start();
 
     tauri::Builder::default()
         .manage(AppState {
             data: Mutex::new(initial_data),
             storage,
+            net_tx: net_service.tx,
         })
         .invoke_handler(tauri::generate_handler![
             get_current_data,
