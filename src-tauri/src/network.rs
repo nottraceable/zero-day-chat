@@ -1,5 +1,5 @@
-use libp2p::{gossipsub, swarm::SwarmEvent, Multiaddr, PeerId};
-use std::error::Error;
+use libp2p::futures::StreamExt;
+use libp2p::{gossipsub, swarm::SwarmEvent, Multiaddr};
 use tokio::sync::mpsc;
 
 pub struct NetworkService {
@@ -22,10 +22,11 @@ impl NetworkService {
             {
                 Ok(builder) => match builder.with_behaviour(|_| {
                     let gossipsub_config = gossipsub::ConfigBuilder::default().build().unwrap();
-                    gossipsub::Behaviour::new(
+                    gossipsub::Behaviour::<gossipsub::IdentityTransform>::new(
                         gossipsub::MessageAuthenticity::Anonymous,
                         gossipsub_config,
-                    ).unwrap()
+                    )
+                    .unwrap()
                 }) {
                     Ok(b) => b.build(),
                     Err(_) => return,

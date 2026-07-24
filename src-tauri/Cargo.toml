@@ -6,7 +6,7 @@ authors = ["nottraceable"]
 edition = "2021"
 
 [build-dependencies]
-tauri-build = "1.5"
+tauri-build = { version = "1.5", features = [] }
 
 [dependencies]
 tauri = { version = "1.5", features = ["shell-open"] }
