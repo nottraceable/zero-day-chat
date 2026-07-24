@@ -2,8 +2,8 @@
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
-    "devPath": "..",
-    "distDir": ".."
+    "devPath": "../src",
+    "distDir": "../src"
   },
   "package": {
     "productName": "zero-day-chat",
