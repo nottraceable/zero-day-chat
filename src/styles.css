@@ -30,6 +30,21 @@ body {
 
 .hidden { display: none !important; }
 
+/* BRANDING & LOGOS */
+.brand-logo, .modal-brand-logo {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.6));
+}
+
+.server-logo-img, .user-avatar-img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
 /* MODALS & AUTHENTICATION */
 .modal-overlay {
   position: fixed;
@@ -55,7 +70,7 @@ body {
   box-shadow: 0 16px 32px rgba(0, 0, 0, 0.8);
 }
 
-.logo-header {
+.logo-header, .modal-header-with-logo {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -146,7 +161,7 @@ textarea {
 }
 
 /* BUTTONS */
-.primary-btn, .success-btn, .secondary-btn, .small-btn {
+.primary-btn, .success-btn, .secondary-btn, .small-btn, .danger-btn {
   padding: 10px 16px;
   border-radius: 6px;
   border: none;
@@ -161,6 +176,12 @@ textarea {
 .success-btn { background: var(--accent-green); color: #000000; font-weight: 700; }
 .secondary-btn { background: var(--bg-dark); color: var(--text-main); border: 1px solid var(--border-color); }
 .small-btn { padding: 6px 12px; font-size: 12px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); }
+
+.danger-btn {
+  background: var(--danger-color);
+  color: #ffffff;
+  font-weight: 700;
+}
 
 .block-btn { width: 100%; margin-top: 12px; }
 
@@ -225,6 +246,7 @@ textarea {
   width: 32px;
   height: 2px;
   background: var(--border-color);
+  margin: 8px 0;
 }
 
 .group-list {
@@ -325,8 +347,45 @@ textarea {
   gap: 10px;
 }
 
+.user-details { flex: 1; overflow: hidden; }
 .user-card-name { font-weight: 600; display: block; font-size: 13px; }
 .user-card-id { font-size: 11px; color: var(--text-muted); display: block; font-family: monospace; }
+
+.settings-gear-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+/* SETTINGS MODAL STYLING */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.settings-value {
+  font-size: 14px;
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+.settings-group-box {
+  background: var(--bg-dark);
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  margin-top: 12px;
+}
+
+.settings-actions-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
 
 /* MAIN CHAT VIEWPORT */
 .chat-viewport {

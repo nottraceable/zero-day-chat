@@ -1,16 +1,12 @@
 use serde::{Deserialize, Serialize};
-use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::fs;
 use std::path::PathBuf;
+use crate::identity::Identity;
 
-use crate::identity::IdentityKeys;
-
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Friend {
     pub user_id: String,
     pub display_name: String,
-    pub public_key_hex: String,
-    pub status: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -26,6 +22,7 @@ pub struct Group {
     pub name: String,
     pub owner_id: String,
     pub channels: Vec<Channel>,
+    pub members: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -41,49 +38,37 @@ pub struct Message {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct AppData {
-    pub identity: Option<IdentityKeys>,
+    pub identity: Option<Identity>,
     pub friends: Vec<Friend>,
     pub groups: Vec<Group>,
     pub messages: Vec<Message>,
 }
 
-pub fn get_storage_path() -> PathBuf {
-    let mut path = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
-    path.push("zero-day-chat");
-    fs::create_dir_all(&path).ok();
-    path.push("app_data.json");
-    path
+pub struct StorageManager {
+    file_path: PathBuf,
 }
 
-pub fn load_app_data() -> AppData {
-    let path = get_storage_path();
-    if !path.exists() {
-        return AppData::default();
+impl StorageManager {
+    pub fn new() -> Self {
+        let mut path = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+        path.push("zero-day-chat");
+        fs::create_dir_all(&path).ok();
+        path.push("state.json");
+        Self { file_path: path }
     }
 
-    let mut file = match File::open(&path) {
-        Ok(f) => f,
-        Err(_) => return AppData::default(),
-    };
-
-    let mut content = String::new();
-    if file.read_to_string(&mut content).is_err() {
-        return AppData::default();
+    pub fn load(&self) -> AppData {
+        if let Ok(data) = fs::read_to_string(&self.file_path) {
+            serde_json::from_str(&data).unwrap_or_default()
+        } else {
+            AppData::default()
+        }
     }
 
-    serde_json::from_str(&content).unwrap_or_default()
-}
-
-pub fn save_app_data(data: &AppData) -> Result<(), String> {
-    let path = get_storage_path();
-    let json = serde_json::to_string_pretty(data)
-        .map_err(|e| format!("Serialization error: {}", e))?;
-
-    let mut file = File::create(&path)
-        .map_err(|e| format!("Failed to create storage file: {}", e))?;
-
-    file.write_all(json.as_bytes())
-        .map_err(|e| format!("Failed to write storage file: {}", e))?;
-
-    Ok(())
+    pub fn save(&self, data: &AppData) -> Result<(), String> {
+        let json = serde_json::to_string_pretty(data)
+            .map_err(|e| format!("Serialization error: {}", e))?;
+        fs::write(&self.file_path, json)
+            .map_err(|e| format!("Failed to write state file: {}", e))
+    }
 }

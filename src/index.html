@@ -12,7 +12,7 @@
   <div id="auth-modal" class="modal-overlay">
     <div class="auth-card">
       <div class="logo-header">
-        <span class="logo-icon">⚡</span>
+        <img src="../src-tauri/logos/zero-day.png" alt="ZERO-DAY Logo" class="brand-logo" onerror="this.style.display='none'" />
         <h2>ZERO-DAY</h2>
       </div>
       <p class="subtitle">Decentralized P2P Secure Messenger</p>
@@ -48,7 +48,7 @@
         <label for="recover-display-name">Display Name</label>
         <input type="text" id="recover-display-name" placeholder="e.g. Satoshi" autocomplete="off" />
 
-        <label for="recover-user-id">User ID (zd1...)</label>
+        <label for="recover-user-id">User ID (zd1... optional)</label>
         <input type="text" id="recover-user-id" placeholder="zd1..." autocomplete="off" />
 
         <label for="recover-seed">Seed Phrase (24 Words)</label>
@@ -64,7 +64,7 @@
     <!-- LEFTMOST SIDEBAR (SERVERS / GROUPS & DMS) -->
     <div class="server-sidebar">
       <div id="btn-dm-view" class="server-icon active-server" title="Direct Messages">
-        <span>⚡</span>
+        <img src="../src-tauri/logos/zero-day.png" alt="DMs" class="server-logo-img" onerror="this.outerHTML='⚡'" />
       </div>
       <div class="divider"></div>
       <div id="group-list" class="group-list"></div>
@@ -101,11 +101,12 @@
 
       <!-- USER PROFILE FOOTER -->
       <div class="user-card">
-        <div class="user-avatar">👤</div>
+        <img src="../src-tauri/logos/zero-day.png" class="user-avatar-img" onerror="this.outerHTML='👤'" />
         <div class="user-details">
           <span id="user-card-name" class="user-card-name">Username</span>
           <span id="user-card-id" class="user-card-id">zd1...</span>
         </div>
+        <button id="btn-open-settings" class="settings-gear-btn" title="Settings & Management">⚙️</button>
       </div>
     </div>
 
@@ -123,6 +124,48 @@
       <div class="chat-input-area">
         <input type="text" id="message-input" placeholder="Type a secure P2P message..." autocomplete="off" />
         <button id="btn-send-message" class="primary-btn">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: SETTINGS & ACCOUNT MANAGEMENT -->
+  <div id="modal-settings" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header-with-logo">
+        <img src="../src-tauri/logos/zero-day.png" class="modal-brand-logo" onerror="this.style.display='none'" />
+        <h3>Settings & Account Management</h3>
+      </div>
+
+      <div class="settings-section">
+        <label>Display Name</label>
+        <p id="settings-display-name" class="settings-value">-</p>
+
+        <label>User ID (Public Key)</label>
+        <div class="input-copy-group">
+          <input type="text" id="settings-user-id" readonly />
+          <button id="btn-copy-settings-id" class="small-btn">Copy</button>
+        </div>
+
+        <label>BIP-39 Seed Phrase</label>
+        <div class="input-copy-group">
+          <input type="password" id="settings-seed-phrase" readonly />
+          <button id="btn-toggle-seed-vis" class="small-btn">Show</button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div id="group-management-actions" class="settings-group-box hidden">
+        <h4>Group Management</h4>
+        <div class="settings-actions-row">
+          <button id="btn-leave-group" class="secondary-btn">Leave Current Group</button>
+          <button id="btn-delete-group" class="danger-btn hidden">Delete Group (Owner)</button>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="btn-logout" class="danger-btn">Logout Identity</button>
+        <button id="close-settings" class="secondary-btn">Close</button>
       </div>
     </div>
   </div>

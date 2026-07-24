@@ -1,68 +1,61 @@
-use bip39::{Language, Mnemonic};
-use ed25519_dalek::{SigningKey, VerifyingKey};
+use bip39::{Mnemonic, Language};
+use ed25519_dalek::SigningKey;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct IdentityKeys {
-    pub user_id: String,
+pub struct Identity {
     pub display_name: String,
+    pub user_id: String,
     pub seed_phrase: String,
     pub public_key_hex: String,
-    pub private_key_hex: String,
 }
 
-pub fn generate_new_identity(display_name: String) -> Result<IdentityKeys, String> {
-    let mnemonic = Mnemonic::generate_in(Language::English, 24)
-        .map_err(|e| format!("Failed to generate 24-word seed phrase: {}", e))?;
+impl Identity {
+    pub fn generate(display_name: String) -> Result<Self, String> {
+        let mut entropy = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut entropy);
 
-    let seed_phrase = mnemonic.to_string();
-    derive_identity_from_seed(display_name, &seed_phrase)
-}
+        let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy)
+            .map_err(|e| format!("Mnemonic generation failed: {}", e))?;
+        
+        let seed_phrase = mnemonic.to_string();
+        let seed = mnemonic.to_seed("");
+        
+        let signing_key = SigningKey::from_bytes(&seed[0..32].try_into().unwrap());
+        let public_key = signing_key.verifying_key();
+        let public_key_hex = hex::encode(public_key.as_bytes());
+        let user_id = format!("zd1{}", &public_key_hex[..16]);
 
-pub fn restore_identity(
-    display_name: String,
-    user_id: String,
-    seed_phrase: String,
-) -> Result<IdentityKeys, String> {
-    let clean_phrase = seed_phrase.trim();
-    let mnemonic: Mnemonic = clean_phrase
-        .parse()
-        .map_err(|_| "Invalid BIP-39 seed phrase. Please check your 24 words.".to_string())?;
-
-    let derived = derive_identity_from_seed(display_name, &mnemonic.to_string())?;
-
-    let clean_user_id = user_id.trim();
-    if !clean_user_id.is_empty() && clean_user_id != derived.user_id {
-        return Err("Account ID does not match the key derived from this seed phrase.".to_string());
+        Ok(Self {
+            display_name,
+            user_id,
+            seed_phrase,
+            public_key_hex,
+        })
     }
 
-    Ok(derived)
-}
+    pub fn recover(display_name: String, user_id: String, seed_phrase: String) -> Result<Self, String> {
+        let mnemonic = Mnemonic::parse_in(Language::English, &seed_phrase)
+            .map_err(|e| format!("Invalid seed phrase: {}", e))?;
 
-pub fn derive_identity_from_seed(display_name: String, seed_phrase: &str) -> Result<IdentityKeys, String> {
-    let mnemonic: Mnemonic = seed_phrase
-        .parse()
-        .map_err(|_| "Failed to parse seed phrase.".to_string())?;
+        let seed = mnemonic.to_seed("");
+        let signing_key = SigningKey::from_bytes(&seed[0..32].try_into().unwrap());
+        let public_key = signing_key.verifying_key();
+        let public_key_hex = hex::encode(public_key.as_bytes());
+        
+        let derived_user_id = format!("zd1{}", &public_key_hex[..16]);
+        let final_user_id = if user_id.trim().is_empty() {
+            derived_user_id
+        } else {
+            user_id
+        };
 
-    let seed = mnemonic.to_seed("");
-    let seed_bytes = &seed;
-    let secret_bytes: [u8; 32] = seed_bytes[0..32]
-        .try_into()
-        .map_err(|_| "Failed to derive secret key from seed.".to_string())?;
-
-    let signing_key = SigningKey::from_bytes(&secret_bytes);
-    let verifying_key: VerifyingKey = signing_key.verifying_key();
-
-    let pub_key_hex = hex::encode(verifying_key.as_bytes());
-    let priv_key_hex = hex::encode(signing_key.to_bytes());
-
-    let user_id = format!("zd1{}", &pub_key_hex[..32]);
-
-    Ok(IdentityKeys {
-        user_id,
-        display_name: display_name.trim().to_string(),
-        seed_phrase: seed_phrase.to_string(),
-        public_key_hex: pub_key_hex,
-        private_key_hex: priv_key_hex,
-    })
+        Ok(Self {
+            display_name,
+            user_id: final_user_id,
+            seed_phrase,
+            public_key_hex,
+        })
+    }
 }

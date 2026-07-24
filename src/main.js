@@ -1,4 +1,3 @@
-// Safe Tauri IPC / Event API binding with fallbacks
 const invoke = window.__TAURI__?.tauri?.invoke || window.__TAURI__?.invoke || window.__TAURI__?.core?.invoke;
 const listen = window.__TAURI__?.event?.listen || window.__TAURI__?.listen;
 
@@ -8,7 +7,7 @@ let activeChannelId = null;
 let activeGroup = null;
 
 window.addEventListener('DOMContentLoaded', async () => {
-  // 1. INITIALIZE & CHECK EXISTING LOCAL STATE
+  // 1. INITIALIZE & CHECK EXISTING SESSION
   try {
     if (invoke) {
       appState = await invoke('get_current_data');
@@ -17,34 +16,10 @@ window.addEventListener('DOMContentLoaded', async () => {
       }
     }
   } catch (err) {
-    console.error('Failed to load app data:', err);
+    console.error('Failed to load app state:', err);
   }
 
-  // 2. REAL-TIME TAURI EVENT LISTENERS (Incoming P2P Messages & State Updates)
-  if (listen) {
-    listen('p2p-message-received', (event) => {
-      if (event.payload) {
-        if (!appState.messages) appState.messages = [];
-        appState.messages.push(event.payload);
-        renderMessages();
-      }
-    });
-
-    listen('state-updated', (event) => {
-      if (event.payload) {
-        appState = event.payload;
-        if (activeGroup) {
-          activeGroup = appState.groups?.find(g => g.id === activeGroup.id) || null;
-        }
-        renderFriends();
-        renderGroups();
-        if (activeGroup) renderChannels(activeGroup);
-        renderMessages();
-      }
-    });
-  }
-
-  // 3. AUTH TAB SWITCHING
+  // 2. AUTH TAB SWITCHING
   const tabCreateBtn = document.getElementById('tab-create-btn');
   const tabRecoverBtn = document.getElementById('tab-recover-btn');
   const createForm = document.getElementById('create-account-form');
@@ -64,14 +39,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     createForm.classList.add('hidden');
   });
 
-  // 4. GENERATE ACCOUNT & SEED
+  // 3. GENERATE ACCOUNT & SEED
   document.getElementById('gen-seed-btn').addEventListener('click', async () => {
     const displayName = document.getElementById('create-display-name').value.trim();
     if (!displayName) return alert('Please choose a Display Name.');
 
     try {
       appState = await invoke('create_account', { displayName });
-
       document.getElementById('generated-user-id').value = appState.identity.user_id;
       document.getElementById('generated-seed').value = appState.identity.seed_phrase;
       document.getElementById('seed-display-area').classList.remove('hidden');
@@ -90,7 +64,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     launchApp();
   });
 
-  // 5. RECOVER ACCOUNT
+  // 4. RECOVER ACCOUNT
   document.getElementById('finish-recover-btn').addEventListener('click', async () => {
     const displayName = document.getElementById('recover-display-name').value.trim();
     const userId = document.getElementById('recover-user-id').value.trim();
@@ -106,7 +80,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 6. LAUNCH MAIN SHELL
+  // 5. LAUNCH MAIN APPLICATION SHELL
   function launchApp() {
     document.getElementById('auth-modal').classList.add('hidden');
     document.getElementById('app-shell').classList.remove('hidden');
@@ -118,7 +92,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     renderGroups();
   }
 
-  // 7. DIRECT MESSAGES VIEW SWITCHER
+  // 6. DIRECT MESSAGES VIEW SWITCHER
   document.getElementById('btn-dm-view').addEventListener('click', () => {
     activeGroup = null;
     activeTargetId = null;
@@ -135,7 +109,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     renderMessages();
   });
 
-  // 8. MODALS
+  // 7. MODAL TOGGLES
   const toggleModal = (modalId, show) => {
     document.getElementById(modalId).classList.toggle('hidden', !show);
   };
@@ -151,6 +125,87 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('btn-open-channel-modal').addEventListener('click', () => toggleModal('modal-create-channel', true));
   document.getElementById('close-create-channel').addEventListener('click', () => toggleModal('modal-create-channel', false));
+
+  // 8. SETTINGS MODAL & ACCOUNT MANAGEMENT
+  document.getElementById('btn-open-settings').addEventListener('click', () => {
+    if (!appState || !appState.identity) return;
+
+    document.getElementById('settings-display-name').textContent = appState.identity.display_name;
+    document.getElementById('settings-user-id').value = appState.identity.user_id;
+    document.getElementById('settings-seed-phrase').value = appState.identity.seed_phrase;
+
+    const groupMgmt = document.getElementById('group-management-actions');
+    const deleteGroupBtn = document.getElementById('btn-delete-group');
+
+    if (activeGroup) {
+      groupMgmt.classList.remove('hidden');
+      const isOwner = activeGroup.owner_id === appState.identity.user_id;
+      deleteGroupBtn.classList.toggle('hidden', !isOwner);
+    } else {
+      groupMgmt.classList.add('hidden');
+    }
+
+    toggleModal('modal-settings', true);
+  });
+
+  document.getElementById('close-settings').addEventListener('click', () => toggleModal('modal-settings', false));
+
+  document.getElementById('btn-copy-settings-id').addEventListener('click', () => {
+    navigator.clipboard.writeText(document.getElementById('settings-user-id').value);
+    alert('User ID copied to clipboard!');
+  });
+
+  document.getElementById('btn-toggle-seed-vis').addEventListener('click', (e) => {
+    const seedInput = document.getElementById('settings-seed-phrase');
+    if (seedInput.type === 'password') {
+      seedInput.type = 'text';
+      e.target.textContent = 'Hide';
+    } else {
+      seedInput.type = 'password';
+      e.target.textContent = 'Show';
+    }
+  });
+
+  document.getElementById('btn-logout').addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to log out? Ensure you have saved your seed phrase.')) return;
+    try {
+      appState = await invoke('logout');
+      location.reload();
+    } catch (err) {
+      alert('Error logging out: ' + err);
+    }
+  });
+
+  document.getElementById('btn-leave-group').addEventListener('click', async () => {
+    if (!activeGroup) return;
+    try {
+      appState = await invoke('leave_group', { groupId: activeGroup.id });
+      activeGroup = null;
+      activeTargetId = null;
+      activeChannelId = null;
+      renderGroups();
+      toggleModal('modal-settings', false);
+      document.getElementById('btn-dm-view').click();
+    } catch (err) {
+      alert('Error leaving group: ' + err);
+    }
+  });
+
+  document.getElementById('btn-delete-group').addEventListener('click', async () => {
+    if (!activeGroup) return;
+    if (!confirm(`Are you sure you want to delete ${activeGroup.name}?`)) return;
+    try {
+      appState = await invoke('delete_group', { groupId: activeGroup.id });
+      activeGroup = null;
+      activeTargetId = null;
+      activeChannelId = null;
+      renderGroups();
+      toggleModal('modal-settings', false);
+      document.getElementById('btn-dm-view').click();
+    } catch (err) {
+      alert('Error deleting group: ' + err);
+    }
+  });
 
   // 9. CREATE GROUPCHAT
   document.getElementById('submit-create-group').addEventListener('click', async () => {
@@ -182,7 +237,25 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 11. CREATE CHANNEL
+  // 11. ADD FRIEND
+  document.getElementById('submit-add-friend').addEventListener('click', async () => {
+    const friendId = document.getElementById('input-friend-id').value.trim();
+    const displayName = document.getElementById('input-friend-name').value.trim();
+
+    if (!friendId) return;
+
+    try {
+      appState = await invoke('add_friend', { friendId, displayName: displayName || null });
+      renderFriends();
+      toggleModal('modal-add-friend', false);
+      document.getElementById('input-friend-id').value = '';
+      document.getElementById('input-friend-name').value = '';
+    } catch (err) {
+      alert('Error adding friend: ' + err);
+    }
+  });
+
+  // 12. CREATE CHANNEL
   document.getElementById('submit-create-channel').addEventListener('click', async () => {
     const channelName = document.getElementById('input-channel-name').value.trim();
     const category = document.getElementById('input-channel-category').value.trim();
@@ -203,24 +276,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('input-channel-category').value = '';
     } catch (err) {
       alert('Permission Error: ' + err);
-    }
-  });
-
-  // 12. ADD FRIEND
-  document.getElementById('submit-add-friend').addEventListener('click', async () => {
-    const friendId = document.getElementById('input-friend-id').value.trim();
-    const displayName = document.getElementById('input-friend-name').value.trim();
-
-    if (!friendId) return;
-
-    try {
-      appState = await invoke('add_friend', { friendId, displayName });
-      renderFriends();
-      toggleModal('modal-add-friend', false);
-      document.getElementById('input-friend-id').value = '';
-      document.getElementById('input-friend-name').value = '';
-    } catch (err) {
-      alert('Error: ' + err);
     }
   });
 
@@ -266,7 +321,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       icon.onclick = () => {
         activeGroup = group;
         activeTargetId = group.id;
-        activeChannelId = null; // FIX: Reset selected channel on group switch
+        activeChannelId = null;
 
         document.getElementById('btn-dm-view').classList.remove('active-server');
         document.querySelectorAll('.group-list .server-icon').forEach(el => el.classList.remove('active-server'));
@@ -279,7 +334,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
         document.getElementById('btn-copy-group-id').onclick = () => {
           navigator.clipboard.writeText(group.id);
-          alert('Group ID copied to clipboard: ' + group.id);
+          alert('Group ID copied: ' + group.id);
         };
 
         const isOwner = group.owner_id === appState.identity.user_id;
@@ -292,7 +347,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 15. RENDER CHANNELS IN CATEGORIES
+  // 15. RENDER CHANNELS
   function renderChannels(group) {
     const channelListContainer = document.getElementById('channel-list');
     channelListContainer.innerHTML = '';
@@ -337,7 +392,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // 16. RENDER MESSAGES (XSS-Safe DOM Construction)
+  // 16. RENDER MESSAGES (XSS-SAFE)
   function renderMessages() {
     const chatContainer = document.getElementById('chat-messages');
     chatContainer.innerHTML = '';
