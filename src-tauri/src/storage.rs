@@ -7,6 +7,7 @@ pub struct IdentityData {
     pub display_name: String,
     pub user_id: String,
     pub seed_phrase: String,
+    pub public_key_hex: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

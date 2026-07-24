@@ -5,11 +5,23 @@ mod storage;
 mod network;
 
 use identity::Identity;
-use storage::{AppData, Channel, Friend, Group, Message, StorageManager, FriendRequest};
+use storage::{AppData, Channel, Friend, Group, Message, StorageManager, FriendRequest, IdentityData};
 use network::NetworkPacket;
 use std::sync::{Arc, Mutex};
 use tauri::{State, Manager};
 use tokio::sync::mpsc;
+
+// Convert Identity into IdentityData for storage serialization
+impl From<Identity> for IdentityData {
+    fn from(id: Identity) -> Self {
+        IdentityData {
+            display_name: id.display_name,
+            user_id: id.user_id,
+            seed_phrase: id.seed_phrase,
+            public_key_hex: id.public_key_hex,
+        }
+    }
+}
 
 struct AppState {
     data: Arc<Mutex<AppData>>,
@@ -27,7 +39,7 @@ fn get_current_data(state: State<'_, AppState>) -> Result<AppData, String> {
 fn create_account(display_name: String, state: State<'_, AppState>) -> Result<AppData, String> {
     let mut data = state.data.lock().unwrap();
     let identity = Identity::generate(display_name)?;
-    data.identity = Some(identity);
+    data.identity = Some(identity.into());
     state.storage.save(&data)?;
     Ok(data.clone())
 }
@@ -36,7 +48,7 @@ fn create_account(display_name: String, state: State<'_, AppState>) -> Result<Ap
 fn recover_account(display_name: String, user_id: String, seed_phrase: String, state: State<'_, AppState>) -> Result<AppData, String> {
     let mut data = state.data.lock().unwrap();
     let identity = Identity::recover(display_name, user_id, seed_phrase)?;
-    data.identity = Some(identity);
+    data.identity = Some(identity.into());
     state.storage.save(&data)?;
     Ok(data.clone())
 }
@@ -113,7 +125,7 @@ fn accept_friend_request(request_id: String, state: State<'_, AppState>) -> Resu
 
     let req_pos = data.pending_requests.iter().position(|r| r.id == request_id)
         .ok_or("Friend request not found.")?;
-    
+
     let req = data.pending_requests.remove(req_pos);
 
     let friend = Friend {
@@ -127,7 +139,6 @@ fn accept_friend_request(request_id: String, state: State<'_, AppState>) -> Resu
 
     state.storage.save(&data)?;
 
-    // Send Acceptance packet back over P2P network
     let _ = state.net_tx.send(NetworkPacket::FriendAcceptPacket {
         friend: Friend {
             user_id: identity.user_id,

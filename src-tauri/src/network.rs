@@ -1,15 +1,25 @@
+use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use tauri::{AppHandle, Manager};
 use tokio::sync::mpsc;
-use tauri::{AppHandle, Emitter};
-use crate::storage::{AppData, Friend, Message, FriendRequest};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(tag = "type")]
+use crate::storage::{AppData, Friend, FriendRequest, Message, StorageManager};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NetworkPacket {
-    FriendRequestPacket { request: FriendRequest },
-    FriendAcceptPacket { friend: Friend, target_id: String },
-    ChatMessagePacket { message: Message },
+    FriendRequestPacket {
+        request: FriendRequest,
+    },
+    FriendAcceptPacket {
+        friend: Friend,
+        target_id: String,
+    },
+    ChatMessagePacket {
+        message: Message,
+    },
+    SyncStatePacket {
+        data: AppData,
+    },
 }
 
 pub struct NetworkService {
@@ -19,49 +29,49 @@ pub struct NetworkService {
 impl NetworkService {
     pub fn start(
         app_handle: AppHandle,
-        app_state: Arc<std::sync::Mutex<AppData>>,
-        storage: crate::storage::StorageManager,
+        state: Arc<Mutex<AppData>>,
+        storage: StorageManager,
     ) -> Self {
         let (tx, mut rx) = mpsc::unbounded_channel::<NetworkPacket>();
 
         tauri::async_runtime::spawn(async move {
-            // Processing loop for incoming / outgoing network traffic
             while let Some(packet) = rx.recv().await {
-                let mut data = app_state.lock().unwrap();
-                let my_id = data.identity.as_ref().map(|i| i.user_id.clone()).unwrap_or_default();
-
-                match packet {
-                    NetworkPacket::FriendRequestPacket { request } => {
-                        if request.target_id == my_id || request.target_id == "*" {
-                            if !data.pending_requests.iter().any(|r| r.id == request.id) {
-                                data.pending_requests.push(request);
-                                storage.save(&data).ok();
-                                let _ = app_handle.emit("app-data-updated", data.clone());
+                if let Ok(mut data) = state.lock() {
+                    match &packet {
+                        NetworkPacket::FriendRequestPacket { request } => {
+                            let exists = data
+                                .pending_requests
+                                .iter()
+                                .any(|r| r.sender_id == request.sender_id);
+                            if !exists {
+                                data.pending_requests.push(request.clone());
                             }
                         }
-                    }
-                    NetworkPacket::FriendAcceptPacket { friend, target_id } => {
-                        if target_id == my_id {
+                        NetworkPacket::FriendAcceptPacket { friend, .. } => {
                             if !data.friends.iter().any(|f| f.user_id == friend.user_id) {
-                                data.friends.push(friend);
-                                storage.save(&data).ok();
-                                let _ = app_handle.emit("app-data-updated", data.clone());
+                                data.friends.push(friend.clone());
                             }
                         }
-                    }
-                    NetworkPacket::ChatMessagePacket { message } => {
-                        if message.target_id == my_id || data.friends.iter().any(|f| f.user_id == message.sender_id) {
+                        NetworkPacket::ChatMessagePacket { message } => {
                             if !data.messages.iter().any(|m| m.id == message.id) {
-                                data.messages.push(message);
-                                storage.save(&data).ok();
-                                let _ = app_handle.emit("app-data-updated", data.clone());
+                                data.messages.push(message.clone());
                             }
                         }
+                        NetworkPacket::SyncStatePacket { data: new_data } => {
+                            *data = new_data.clone();
+                        }
                     }
+
+                    // Save state changes to disk
+                    let _ = storage.save(&data);
+
+                    // Notify Tauri v1 frontend via events
+                    let _ = app_handle.emit_all("p2p_event", &packet);
+                    let _ = app_handle.emit_all("app-data-updated", data.clone());
                 }
             }
         });
 
-        Self { tx }
+        NetworkService { tx }
     }
 }
